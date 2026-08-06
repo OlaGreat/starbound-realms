@@ -1,0 +1,15 @@
+{
+  "name": "starbound-realms",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "sdk",
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "build": "pnpm --filter sdk build && pnpm --filter frontend build && pnpm --filter backend build"
+  }
+}

@@ -6,7 +6,7 @@
 [![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-7B2D8B)](https://stellar.org)
 [![Soroban](https://img.shields.io/badge/Smart%20Contracts-Soroban-blue)](https://soroban.stellar.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Good First Issues](https://img.shields.io/github/issues/your-org/starbound-realms/good%20first%20issue)](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+[![Good First Issues](https://img.shields.io/github/issues/OlaGreat/starbound-realms/good%20first%20issue)](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
 ---
 
@@ -165,7 +165,7 @@ starbound-realms/
 - [Docker & Docker Compose](https://docs.docker.com/get-docker/)
 - [Freighter wallet](https://freighter.app/) (browser extension)
 
-### 1. fork the repository
+### 1. Fork the repository
 
 ### 2. Install dependencies
 
@@ -223,11 +223,11 @@ Starbound Realms is actively looking for contributors. Whether you write Rust, T
 
 **Good places to start:**
 
-- [`good first issue`](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — Beginner-friendly issues across all layers
-- [`help wanted`](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) — Larger features open for contributors
-- [`contracts`](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Acontracts) — Soroban/Rust issues
-- [`frontend`](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Afrontend) — React/TypeScript issues
-- [`backend`](https://github.com/your-org/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Abackend) — Node.js/indexer issues
+- [`good first issue`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — Beginner-friendly issues across all layers
+- [`help wanted`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) — Larger features open for contributors
+- [`contracts`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Acontracts) — Soroban/Rust issues
+- [`frontend`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Afrontend) — React/TypeScript issues
+- [`backend`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3Abackend) — Node.js/indexer issues
 
 Read the full [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 
