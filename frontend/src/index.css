@@ -1,0 +1,33 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #080b14;
+  --bg-card: #0e1628;
+  --border: rgba(99, 179, 237, 0.15);
+  --accent: #63b3ed;
+  --accent-glow: rgba(99, 179, 237, 0.3);
+  --text: #e2e8f0;
+  --text-muted: #718096;
+  --purple: #9f7aea;
+  --green: #68d391;
+  --yellow: #f6e05e;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}
