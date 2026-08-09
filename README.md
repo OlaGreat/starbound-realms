@@ -236,16 +236,17 @@ Read the full [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 ## Roadmap
 
 - [x] Project architecture & design
-- [ ] `galaxy-map` contract — core world state
-- [ ] `resources` contract — resource token issuance
+- [x] `galaxy-map` contract — core world state (types, storage, `claim_system`)
+- [x] `resources` contract — resource token issuance (mint, burn, balance)
 - [ ] `fleet` contract — unit management
 - [ ] `battle` contract — combat resolution
-- [ ] TypeScript SDK — wraps all contract calls
+- [x] TypeScript SDK — `StarboundClient` RPC setup
+- [ ] SDK — galaxy, fleet, battle, resources modules
 - [ ] Backend indexer — Soroban event listener
-- [ ] Backend REST API — galaxy, player, fleet, battle endpoints
+- [ ] Backend REST API — full implementation (galaxy, player, fleet, battle)
 - [ ] Frontend — galaxy map renderer
 - [ ] Frontend — fleet builder UI
-- [ ] Frontend — battle log
+- [ ] Frontend — battle log & wallet integration
 - [ ] Testnet deployment
 - [ ] Mainnet launch
 
