@@ -109,6 +109,32 @@ docs(readme): add testnet deploy instructions
 
 ---
 
+## Engineering Standards
+
+All contributions follow these non-negotiable rules:
+
+- **TDD** — write the failing test first, then write the code that makes it pass
+- **SOLID principles** — Single Responsibility above all else
+- **One function, one job** — every function does exactly one thing and its name must describe that thing precisely
+
+Full details: [`engineering-guidelines.md`](engineering-guidelines.md)
+
+---
+
+## Running Tests
+
+```bash
+# Rust contracts
+cargo test
+
+# TypeScript (SDK / backend / frontend)
+pnpm test
+```
+
+No PR is merged without passing tests. No new function is accepted without a corresponding test.
+
+---
+
 ## Good First Issues
 
 Look for issues labelled [`good first issue`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). These are scoped, well-defined tasks that don't require deep knowledge of the full codebase.
