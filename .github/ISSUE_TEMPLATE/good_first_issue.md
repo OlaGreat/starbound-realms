@@ -40,3 +40,8 @@ labels: good first issue
 ## Mentor Available?
 
 <!-- Will you (maintainer) help answer questions on this issue? Yes / No -->
+
+---
+
+> **Before you start:** Read [`docs/engineering-guidelines.md`](../../docs/engineering-guidelines.md).
+> Write your tests first (TDD), keep each function doing one thing only, and name it after what it does.
