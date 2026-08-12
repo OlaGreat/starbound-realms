@@ -85,13 +85,25 @@ docs(readme): update getting started steps
 
 ---
 
+## Engineering Standards
+
+All contributions must follow our engineering guidelines:
+
+- **TDD** — write the test first, then the implementation
+- **SOLID principles** — especially Single Responsibility
+- **One function, one job** — every function does exactly one thing and is named after what it does
+
+Read the full guide: [`docs/engineering-guidelines.md`](docs/engineering-guidelines.md)
+
+---
+
 ## Pull Request Guidelines
 
 - One feature or fix per PR
 - Reference the issue your PR closes: `Closes #42`
 - Write a clear description — what changed and why
-- Ensure CI passes before requesting review
-- Add tests for contract changes where possible
+- Ensure CI passes before requesting review (`cargo test` + `pnpm test`)
+- Every new function must have a corresponding test — no exceptions
 
 ---
 
