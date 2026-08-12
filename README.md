@@ -221,6 +221,13 @@ Open [http://localhost:5173](http://localhost:5173), connect Freighter, and star
 
 Starbound Realms is actively looking for contributors. Whether you write Rust, TypeScript, or just want to improve documentation — there's a place for you here.
 
+**Engineering standards we follow:**
+- **TDD** — write the failing test first, then the implementation
+- **SOLID principles** — Single Responsibility above all else
+- **One function, one job** — every function does exactly one thing and its name must describe that thing precisely
+
+Full details in [`docs/engineering-guidelines.md`](docs/engineering-guidelines.md)
+
 **Good places to start:**
 
 - [`good first issue`](https://github.com/OlaGreat/starbound-realms/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — Beginner-friendly issues across all layers
