@@ -1,61 +1,34 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import { Pool } from 'pg';
+import { createGalaxyRouter } from './api/routes/galaxy';
+import { createPlayerRouter } from './api/routes/player';
+import { createBattleRouter } from './api/routes/battle';
+import { standardLimiter, strictLimiter } from './api/middleware/rateLimit';
+import { errorHandler } from './api/middleware/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Database ──────────────────────────────────────────────────────────────────
+
+const db = new Pool({ connectionString: process.env.DATABASE_URL });
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(express.json());
-
-const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use(limiter);
+app.use(standardLimiter);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+app.get('/health', handleHealthCheck);
+app.use('/galaxy', createGalaxyRouter(db));
+app.use('/player', createPlayerRouter(db));
+app.use('/battles', createBattleRouter(db));
+app.get('/leaderboard', strictLimiter, handleLeaderboard(db));
 
-// Galaxy routes
-app.get('/galaxy', (_req, res) => {
-  // TODO: query indexed galaxy state from PostgreSQL
-  res.json({
-    message: 'Galaxy endpoint — implementation in progress',
-    systems: [],
-  });
-});
+// ── Error handler (must be last) ──────────────────────────────────────────────
 
-app.get('/galaxy/:systemId', (req, res) => {
-  const { systemId } = req.params;
-  // TODO: query single system from PostgreSQL
-  res.json({
-    message: `System ${systemId} — implementation in progress`,
-    system: null,
-  });
-});
-
-// Player routes
-app.get('/player/:address', (req, res) => {
-  const { address } = req.params;
-  // TODO: query player profile from PostgreSQL
-  res.json({
-    message: `Player ${address} — implementation in progress`,
-    player: null,
-  });
-});
-
-// Leaderboard
-app.get('/leaderboard', (_req, res) => {
-  // TODO: query top players from PostgreSQL
-  res.json({ message: 'Leaderboard — implementation in progress', players: [] });
-});
+app.use(errorHandler);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
@@ -64,3 +37,21 @@ app.listen(PORT, () => {
 });
 
 export default app;
+
+// ── Handlers ──────────────────────────────────────────────────────────────────
+
+function handleHealthCheck(_req: express.Request, res: express.Response) {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+}
+
+function handleLeaderboard(db: Pool) {
+  return async (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try {
+      const { fetchLeaderboard } = await import('./db/queries');
+      const players = await fetchLeaderboard(db);
+      res.json({ players });
+    } catch (err) {
+      next(err);
+    }
+  };
+}
