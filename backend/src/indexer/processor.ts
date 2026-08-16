@@ -1,1 +1,64 @@
-// TODO: Event processor
+import { Pool } from 'pg';
+import {
+  upsertStarSystem,
+  saveBattle,
+  incrementPlayerSystemsOwned,
+  decrementPlayerSystemsOwned,
+} from '../db/queries';
+
+export interface ContractEvent {
+  contractId: string;
+  topic: string[];
+  value: any;
+  ledgerSequence: number;
+}
+
+/** Routes a contract event to the correct handler based on its topic */
+export async function processEvent(db: Pool, event: ContractEvent): Promise<void> {
+  const topic = event.topic[0];
+
+  switch (topic) {
+    case 'claimed':
+      await processSystemClaimed(db, event);
+      break;
+    case 'transfer':
+      await processOwnershipTransferred(db, event);
+      break;
+    case 'battle_resolved':
+      await processBattleResolved(db, event);
+      break;
+    default:
+      // Unknown event — skip silently
+      break;
+  }
+}
+
+/** Handles system_claimed event — updates star_systems and player stats */
+async function processSystemClaimed(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const systemId = event.value;
+
+  await upsertStarSystem(db, systemId, player, event.ledgerSequence);
+  await incrementPlayerSystemsOwned(db, player);
+}
+
+/** Handles ownership_transferred event — updates both old and new owner stats */
+async function processOwnershipTransferred(db: Pool, event: ContractEvent): Promise<void> {
+  const systemId = event.topic[1];
+  const [oldOwner, newOwner] = event.value;
+
+  await upsertStarSystem(db, systemId, newOwner, event.ledgerSequence);
+
+  if (oldOwner) {
+    await decrementPlayerSystemsOwned(db, oldOwner);
+  }
+
+  await incrementPlayerSystemsOwned(db, newOwner);
+}
+
+/** Handles battle_resolved event — saves battle record and updates player win/loss counts */
+async function processBattleResolved(db: Pool, event: ContractEvent): Promise<void> {
+  const { battleId, attacker, defender, systemId, winner, rounds } = event.value;
+
+  await saveBattle(db, battleId, attacker, defender, systemId, winner, rounds, event.ledgerSequence);
+}
