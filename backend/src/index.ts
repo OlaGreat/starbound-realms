@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { createGalaxyRouter } from './api/routes/galaxy';
 import { createPlayerRouter } from './api/routes/player';
 import { createBattleRouter } from './api/routes/battle';
+import { createFleetRouter } from './api/routes/fleet';
 import { standardLimiter, strictLimiter } from './api/middleware/rateLimit';
 import { errorHandler } from './api/middleware/errorHandler';
 
@@ -24,6 +25,7 @@ app.get('/health', handleHealthCheck);
 app.use('/galaxy', createGalaxyRouter(db));
 app.use('/player', createPlayerRouter(db));
 app.use('/battles', createBattleRouter(db));
+app.use('/fleet', createFleetRouter(db));
 app.get('/leaderboard', strictLimiter, handleLeaderboard(db));
 
 // ── Error handler (must be last) ──────────────────────────────────────────────
