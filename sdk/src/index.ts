@@ -1,8 +1,14 @@
 export { StarboundClient } from './client';
 export type { StarboundClientConfig, ContractIds } from './client';
 
-// TODO: export galaxy, fleet, battle, resources modules as they are implemented
-// export { GalaxyClient } from './galaxy';
-// export { FleetClient } from './fleet';
-// export { BattleClient } from './battle';
-// export { ResourcesClient } from './resources';
+export { GalaxyClient } from './galaxy';
+export type { StarSystem } from './galaxy';
+
+export { ResourcesClient } from './resources';
+export type { ResourceType, ResourceBalance } from './resources';
+
+export { FleetClient, getUnitCost, calculateFleetAttack, calculateFleetDefense, isFleetEmpty } from './fleet';
+export type { Fleet, UnitType, UnitCost } from './fleet';
+
+export { BattleClient, didAttackerWin, getBattleLoser, wasBattleDecisive } from './battle';
+export type { BattleResult, BattleRecord } from './battle';
