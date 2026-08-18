@@ -44,7 +44,7 @@ async function processSystemClaimed(db: Pool, event: ContractEvent): Promise<voi
 
 /** Handles ownership_transferred event — updates both old and new owner stats */
 async function processOwnershipTransferred(db: Pool, event: ContractEvent): Promise<void> {
-  const systemId = event.topic[1];
+  const systemId = Number(event.topic[1]);
   const [oldOwner, newOwner] = event.value;
 
   await upsertStarSystem(db, systemId, newOwner, event.ledgerSequence);
