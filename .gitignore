@@ -2,7 +2,6 @@
 target/
 **/*.rs.bk
 *.wasm
-Cargo.lock
 
 # ── Node / pnpm ───────────────────────────────────────────────────────────────
 node_modules/
