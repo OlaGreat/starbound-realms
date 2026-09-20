@@ -208,7 +208,7 @@ fn remove_system_from_player_list(env: &Env, player: &Address, system_id: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger as _};
     use soroban_sdk::{Env, IntoVal};
 
     fn setup_galaxy(env: &Env) -> (GalaxyMapContractClient<'_>, Address) {
@@ -296,5 +296,131 @@ mod tests {
         assert_eq!(topics, (symbol_short!("transfer"), 3u32).into_val(&env));
         let payload: (Option<Address>, Address) = data.into_val(&env);
         assert_eq!(payload, (Some(owner), new_owner));
+    }
+
+    #[test]
+    fn initialize_sets_grid_size() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+
+        assert_eq!(client.get_grid_size(), 4);
+    }
+
+    #[test]
+    fn initialize_creates_every_system_unowned() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+
+        assert_eq!(client.get_system(&0).owner, None);
+        assert_eq!(client.get_system(&15).owner, None);
+    }
+
+    #[test]
+    fn initialize_assigns_coordinates_from_system_id() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+
+        let system = client.get_system(&6);
+
+        assert_eq!((system.coord_x, system.coord_y), (2, 1));
+    }
+
+    #[test]
+    #[should_panic(expected = "already initialized")]
+    fn initialize_panics_when_called_twice() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+
+        client.initialize(&admin, &4);
+    }
+
+    #[test]
+    fn claim_system_sets_owner() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+
+        client.claim_system(&player, &2);
+
+        assert_eq!(client.get_system(&2).owner, Some(player));
+    }
+
+    #[test]
+    fn claim_system_records_claim_timestamp() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+        env.ledger().set_timestamp(1_000);
+
+        client.claim_system(&player, &2);
+
+        assert_eq!(client.get_system(&2).last_claimed, 1_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "system already owned")]
+    fn claim_system_panics_when_already_owned() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let first = Address::generate(&env);
+        let second = Address::generate(&env);
+        client.claim_system(&first, &2);
+
+        client.claim_system(&second, &2);
+    }
+
+    #[test]
+    #[should_panic(expected = "system not found")]
+    fn claim_system_panics_for_id_outside_grid() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+
+        client.claim_system(&player, &16);
+    }
+
+    #[test]
+    fn claim_system_adds_system_to_player_list() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+
+        client.claim_system(&player, &2);
+        client.claim_system(&player, &5);
+
+        assert_eq!(client.get_player_systems(&player), vec![&env, 2u32, 5u32]);
+    }
+
+    #[test]
+    fn claim_system_emits_claimed_event() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+
+        client.claim_system(&player, &2);
+
+        let (contract, topics, data) = env.events().all().last().unwrap();
+        assert_eq!(contract, client.address);
+        assert_eq!(topics, (symbol_short!("claimed"), player).into_val(&env));
+        let system_id: u32 = data.into_val(&env);
+        assert_eq!(system_id, 2);
+    }
+
+    #[test]
+    fn get_player_systems_returns_empty_for_new_player() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let player = Address::generate(&env);
+
+        assert_eq!(client.get_player_systems(&player).len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "system not found")]
+    fn get_system_panics_for_unknown_id() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+
+        client.get_system(&99);
     }
 }
