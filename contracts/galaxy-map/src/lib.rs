@@ -113,20 +113,36 @@ impl GalaxyMapContract {
             .persistent()
             .set(&DataKey::System(system_id), &system);
 
-        let mut player_systems: Vec<u32> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::PlayerSystems(player.clone()))
-            .unwrap_or(vec![&env]);
-
-        player_systems.push_back(system_id);
-
-        env.storage()
-            .persistent()
-            .set(&DataKey::PlayerSystems(player.clone()), &player_systems);
+        add_system_to_player_list(&env, &player, system_id);
 
         env.events()
             .publish((symbol_short!("claimed"), player), system_id);
+    }
+
+    /// Transfer a system you own to another player.
+    pub fn transfer_ownership(env: Env, caller: Address, system_id: u32, new_owner: Address) {
+        caller.require_auth();
+
+        let mut system: StarSystem = env
+            .storage()
+            .persistent()
+            .get(&DataKey::System(system_id))
+            .expect("system not found");
+
+        let old_owner = verify_system_is_owned_by(&system, &caller);
+
+        system.owner = Some(new_owner.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::System(system_id), &system);
+
+        remove_system_from_player_list(&env, &old_owner, system_id);
+        add_system_to_player_list(&env, &new_owner, system_id);
+
+        env.events().publish(
+            (symbol_short!("transfer"), system_id),
+            (Some(old_owner), new_owner),
+        );
     }
 
     // ── View functions ────────────────────────────────────────────────────────
@@ -150,5 +166,135 @@ impl GalaxyMapContract {
             .instance()
             .get(&DataKey::GridSize)
             .expect("not initialized")
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Panics unless `caller` owns the system; returns the owner on success.
+fn verify_system_is_owned_by(system: &StarSystem, caller: &Address) -> Address {
+    match &system.owner {
+        None => panic!("system is not owned"),
+        Some(owner) if owner != caller => panic!("caller is not the system owner"),
+        Some(owner) => owner.clone(),
+    }
+}
+
+fn get_player_system_list(env: &Env, player: &Address) -> Vec<u32> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::PlayerSystems(player.clone()))
+        .unwrap_or(vec![env])
+}
+
+fn add_system_to_player_list(env: &Env, player: &Address, system_id: u32) {
+    let mut systems = get_player_system_list(env, player);
+    systems.push_back(system_id);
+    env.storage()
+        .persistent()
+        .set(&DataKey::PlayerSystems(player.clone()), &systems);
+}
+
+fn remove_system_from_player_list(env: &Env, player: &Address, system_id: u32) {
+    let mut systems = get_player_system_list(env, player);
+    if let Some(index) = systems.first_index_of(system_id) {
+        systems.remove(index);
+    }
+    env.storage()
+        .persistent()
+        .set(&DataKey::PlayerSystems(player.clone()), &systems);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::{Env, IntoVal};
+
+    fn setup_galaxy(env: &Env) -> (GalaxyMapContractClient<'_>, Address) {
+        env.mock_all_auths();
+        let contract_id = env.register(GalaxyMapContract, ());
+        let client = GalaxyMapContractClient::new(env, &contract_id);
+        let admin = Address::generate(env);
+        client.initialize(&admin, &4);
+        (client, admin)
+    }
+
+    #[test]
+    fn transfer_ownership_sets_new_owner() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        assert_eq!(client.get_system(&3).owner, Some(new_owner));
+    }
+
+    #[test]
+    fn transfer_ownership_removes_system_from_old_owner_list() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        assert_eq!(client.get_player_systems(&owner).len(), 0);
+    }
+
+    #[test]
+    fn transfer_ownership_adds_system_to_new_owner_list() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        assert_eq!(client.get_player_systems(&new_owner), vec![&env, 3u32]);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the system owner")]
+    fn transfer_ownership_panics_when_caller_is_not_owner() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&stranger, &3, &stranger);
+    }
+
+    #[test]
+    #[should_panic(expected = "system is not owned")]
+    fn transfer_ownership_panics_when_system_is_unclaimed() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let caller = Address::generate(&env);
+
+        client.transfer_ownership(&caller, &3, &caller);
+    }
+
+    #[test]
+    fn transfer_ownership_emits_transfer_event() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        let (contract, topics, data) = env.events().all().last().unwrap();
+        assert_eq!(contract, client.address);
+        assert_eq!(topics, (symbol_short!("transfer"), 3u32).into_val(&env));
+        let payload: (Option<Address>, Address) = data.into_val(&env);
+        assert_eq!(payload, (Some(owner), new_owner));
     }
 }
