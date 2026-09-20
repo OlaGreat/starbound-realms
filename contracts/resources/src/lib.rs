@@ -119,3 +119,188 @@ impl ResourcesContract {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::{Env, IntoVal};
+
+    struct Fixture<'a> {
+        client: ResourcesContractClient<'a>,
+        admin: Address,
+    }
+
+    fn setup_resources(env: &Env) -> Fixture<'_> {
+        env.mock_all_auths();
+        let admin = Address::generate(env);
+        let iron = env.register_stellar_asset_contract_v2(admin.clone());
+        let energy = env.register_stellar_asset_contract_v2(admin.clone());
+        let plasma = env.register_stellar_asset_contract_v2(admin.clone());
+
+        let contract_id = env.register(ResourcesContract, ());
+        let client = ResourcesContractClient::new(env, &contract_id);
+        client.initialize(&admin, &iron.address(), &energy.address(), &plasma.address());
+
+        Fixture { client, admin }
+    }
+
+    #[test]
+    fn balance_is_zero_for_new_player() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Iron), 0);
+    }
+
+    #[test]
+    fn mint_increases_balance_of_that_resource() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Iron, &100);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Iron), 100);
+    }
+
+    #[test]
+    fn mint_does_not_change_other_resource_balances() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Iron, &100);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Energy), 0);
+        assert_eq!(fx.client.balance(&player, &ResourceType::Plasma), 0);
+    }
+
+    #[test]
+    fn each_resource_is_backed_by_its_own_token() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Iron, &1);
+        fx.client.mint(&player, &ResourceType::Energy, &20);
+        fx.client.mint(&player, &ResourceType::Plasma, &300);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Iron), 1);
+        assert_eq!(fx.client.balance(&player, &ResourceType::Energy), 20);
+        assert_eq!(fx.client.balance(&player, &ResourceType::Plasma), 300);
+    }
+
+    #[test]
+    fn mint_accumulates_across_calls() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Plasma, &40);
+        fx.client.mint(&player, &ResourceType::Plasma, &2);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Plasma), 42);
+    }
+
+    #[test]
+    fn mint_requires_admin_authorization() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Iron, &1);
+
+        let (authorizer, _) = env.auths().into_iter().next().unwrap();
+        assert_eq!(authorizer, fx.admin);
+    }
+
+    #[test]
+    fn mint_emits_minted_event() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+
+        fx.client.mint(&player, &ResourceType::Energy, &7);
+
+        let (contract, topics, data) = env
+            .events()
+            .all()
+            .into_iter()
+            .filter(|(c, _, _)| *c == fx.client.address)
+            .last()
+            .unwrap();
+        assert_eq!(contract, fx.client.address);
+        assert_eq!(topics, (symbol_short!("minted"), player).into_val(&env));
+        let payload: (ResourceType, i128) = data.into_val(&env);
+        assert_eq!(payload, (ResourceType::Energy, 7));
+    }
+
+    #[test]
+    fn burn_decreases_balance() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+        fx.client.mint(&player, &ResourceType::Iron, &100);
+
+        fx.client.burn(&player, &ResourceType::Iron, &30);
+
+        assert_eq!(fx.client.balance(&player, &ResourceType::Iron), 70);
+    }
+
+    #[test]
+    #[should_panic]
+    fn burn_panics_when_balance_is_insufficient() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+        fx.client.mint(&player, &ResourceType::Iron, &10);
+
+        fx.client.burn(&player, &ResourceType::Iron, &11);
+    }
+
+    #[test]
+    fn burn_emits_burned_event() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let player = Address::generate(&env);
+        fx.client.mint(&player, &ResourceType::Iron, &10);
+
+        fx.client.burn(&player, &ResourceType::Iron, &4);
+
+        let (contract, topics, data) = env
+            .events()
+            .all()
+            .into_iter()
+            .filter(|(c, _, _)| *c == fx.client.address)
+            .last()
+            .unwrap();
+        assert_eq!(contract, fx.client.address);
+        assert_eq!(topics, (symbol_short!("burned"), player).into_val(&env));
+        let payload: (ResourceType, i128) = data.into_val(&env);
+        assert_eq!(payload, (ResourceType::Iron, 4));
+    }
+
+    #[test]
+    #[should_panic(expected = "already initialized")]
+    fn initialize_panics_when_called_twice() {
+        let env = Env::default();
+        let fx = setup_resources(&env);
+        let token = Address::generate(&env);
+
+        fx.client.initialize(&fx.admin, &token, &token, &token);
+    }
+
+    #[test]
+    #[should_panic(expected = "not initialized")]
+    fn mint_panics_before_initialization() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(ResourcesContract, ());
+        let client = ResourcesContractClient::new(&env, &contract_id);
+        let player = Address::generate(&env);
+
+        client.mint(&player, &ResourceType::Iron, &1);
+    }
+}
