@@ -8,6 +8,7 @@ use soroban_sdk::{contract, contractclient, contractimpl, contracttype, symbol_s
 #[derive(Clone)]
 pub enum DataKey {
     ResourcesContract,
+    GalaxyMapContract,
     Fleet(Address),
     Initialized,
 }
@@ -49,6 +50,15 @@ pub trait ResourcesInterface {
     fn burn(env: Env, from: Address, resource: ResourceType, amount: i128);
 }
 
+/// The slice of the galaxy-map contract this contract depends on.
+#[contractclient(name = "GalaxyMapClient")]
+pub trait GalaxyMapInterface {
+    fn get_grid_size(env: Env) -> u32;
+}
+
+/// Minimum seconds between two fleet moves.
+pub const MOVE_COOLDOWN_SECONDS: u64 = 60;
+
 /// Resource cost, denominated in whole units of each resource token.
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnitCost {
@@ -63,8 +73,13 @@ pub struct FleetContract;
 
 #[contractimpl]
 impl FleetContract {
-    /// Initialize with the address of the resources contract. Must be called once.
-    pub fn initialize(env: Env, admin: Address, resources_contract: Address) {
+    /// Initialize with the resources and galaxy-map contract addresses. Must be called once.
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        resources_contract: Address,
+        galaxy_map_contract: Address,
+    ) {
         admin.require_auth();
 
         let already_init: bool = env
@@ -80,6 +95,9 @@ impl FleetContract {
         env.storage()
             .instance()
             .set(&DataKey::ResourcesContract, &resources_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::GalaxyMapContract, &galaxy_map_contract);
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
 
@@ -98,6 +116,27 @@ impl FleetContract {
             .publish((symbol_short!("built"), player), (unit_type, count));
     }
 
+    /// Move your fleet to an adjacent system, at most once per cooldown period.
+    pub fn move_fleet(env: Env, player: Address, target_system_id: u32) {
+        player.require_auth();
+
+        let mut fleet = get_stored_fleet(&env, &player);
+        verify_fleet_is_not_empty(&fleet);
+        verify_cooldown_has_elapsed(&fleet, env.ledger().timestamp());
+
+        let grid_size = fetch_grid_size(&env);
+        verify_system_is_in_grid(grid_size, target_system_id);
+        verify_systems_are_adjacent(grid_size, fleet.location, target_system_id);
+
+        let from = fleet.location;
+        fleet.location = target_system_id;
+        fleet.last_moved = env.ledger().timestamp();
+        save_fleet(&env, &player, &fleet);
+
+        env.events()
+            .publish((symbol_short!("moved"), player), (from, target_system_id));
+    }
+
     // ── View functions ────────────────────────────────────────────────────────
 
     /// Returns a player's fleet, or an empty fleet if they have none.
@@ -107,6 +146,50 @@ impl FleetContract {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn is_fleet_empty(fleet: &Fleet) -> bool {
+    fleet.scouts == 0 && fleet.fighters == 0 && fleet.cruisers == 0 && fleet.dreadnoughts == 0
+}
+
+fn verify_fleet_is_not_empty(fleet: &Fleet) {
+    if is_fleet_empty(fleet) {
+        panic!("fleet is empty");
+    }
+}
+
+fn verify_cooldown_has_elapsed(fleet: &Fleet, now: u64) {
+    if now < fleet.last_moved + MOVE_COOLDOWN_SECONDS {
+        panic!("fleet is on cooldown");
+    }
+}
+
+fn verify_system_is_in_grid(grid_size: u32, system_id: u32) {
+    if system_id >= grid_size * grid_size {
+        panic!("target system is outside the galaxy");
+    }
+}
+
+fn verify_systems_are_adjacent(grid_size: u32, from: u32, to: u32) {
+    if !are_systems_adjacent(grid_size, from, to) {
+        panic!("target system is not adjacent");
+    }
+}
+
+/// Systems are adjacent when they share an edge on the grid (no diagonals).
+fn are_systems_adjacent(grid_size: u32, a: u32, b: u32) -> bool {
+    let (ax, ay) = (a % grid_size, a / grid_size);
+    let (bx, by) = (b % grid_size, b / grid_size);
+    ax.abs_diff(bx) + ay.abs_diff(by) == 1
+}
+
+fn fetch_grid_size(env: &Env) -> u32 {
+    let galaxy_addr: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::GalaxyMapContract)
+        .expect("not initialized");
+    GalaxyMapClient::new(env, &galaxy_addr).get_grid_size()
+}
 
 fn verify_count_is_positive(count: u32) {
     if count == 0 {
@@ -182,7 +265,7 @@ fn empty_fleet() -> Fleet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::testutils::{Address as _, Events, Ledger as _};
     use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, IntoVal, Vec};
 
     /// Stand-in for the resources contract that records every burn it receives.
@@ -210,6 +293,17 @@ mod tests {
         }
     }
 
+    /// Stand-in for the galaxy-map contract: a fixed 4x4 grid.
+    #[contract]
+    struct MockGalaxy;
+
+    #[contractimpl]
+    impl MockGalaxy {
+        pub fn get_grid_size(_env: Env) -> u32 {
+            4
+        }
+    }
+
     struct Fixture<'a> {
         client: FleetContractClient<'a>,
         resources: MockResourcesClient<'a>,
@@ -218,10 +312,11 @@ mod tests {
     fn setup_fleet(env: &Env) -> Fixture<'_> {
         env.mock_all_auths();
         let resources_id = env.register(MockResources, ());
+        let galaxy_id = env.register(MockGalaxy, ());
         let contract_id = env.register(FleetContract, ());
         let client = FleetContractClient::new(env, &contract_id);
         let admin = Address::generate(env);
-        client.initialize(&admin, &resources_id);
+        client.initialize(&admin, &resources_id, &galaxy_id);
         Fixture { client, resources: MockResourcesClient::new(env, &resources_id) }
     }
 
@@ -246,7 +341,7 @@ mod tests {
         let fx = setup_fleet(&env);
         let admin = Address::generate(&env);
 
-        fx.client.initialize(&admin, &fx.resources.address);
+        fx.client.initialize(&admin, &fx.resources.address, &fx.resources.address);
     }
 
     #[test]
@@ -377,5 +472,172 @@ mod tests {
         assert_eq!(topics, (symbol_short!("built"), player).into_val(&env));
         let payload: (UnitType, u32) = data.into_val(&env);
         assert_eq!(payload, (UnitType::Cruiser, 2));
+    }
+
+    // ── adjacency ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn systems_next_to_each_other_in_a_row_are_adjacent() {
+        assert!(are_systems_adjacent(4, 0, 1));
+        assert!(are_systems_adjacent(4, 1, 0));
+    }
+
+    #[test]
+    fn systems_above_and_below_each_other_are_adjacent() {
+        assert!(are_systems_adjacent(4, 0, 4));
+        assert!(are_systems_adjacent(4, 4, 0));
+    }
+
+    #[test]
+    fn diagonal_systems_are_not_adjacent() {
+        assert!(!are_systems_adjacent(4, 0, 5));
+    }
+
+    #[test]
+    fn a_system_is_not_adjacent_to_itself() {
+        assert!(!are_systems_adjacent(4, 5, 5));
+    }
+
+    #[test]
+    fn ids_that_wrap_across_a_row_edge_are_not_adjacent() {
+        // 3 is the last column of row 0, 4 is the first column of row 1
+        assert!(!are_systems_adjacent(4, 3, 4));
+    }
+
+    #[test]
+    fn empty_fleet_is_detected() {
+        assert!(is_fleet_empty(&empty_fleet()));
+        assert!(!is_fleet_empty(&Fleet { dreadnoughts: 1, ..empty_fleet() }));
+    }
+
+    // ── move_fleet ────────────────────────────────────────────────────────────
+
+    fn fleet_with_one_scout(env: &Env, fx: &Fixture<'_>) -> Address {
+        let player = Address::generate(env);
+        fx.client.build_unit(&player, &UnitType::Scout, &1);
+        env.ledger().set_timestamp(1_000);
+        player
+    }
+
+    #[test]
+    fn move_fleet_updates_location() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &1);
+
+        assert_eq!(fx.client.get_fleet(&player).location, 1);
+    }
+
+    #[test]
+    fn move_fleet_records_move_timestamp() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &1);
+
+        assert_eq!(fx.client.get_fleet(&player).last_moved, 1_000);
+    }
+
+    #[test]
+    fn move_fleet_requires_player_authorization() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &1);
+
+        let (authorizer, _) = env.auths().into_iter().next().unwrap();
+        assert_eq!(authorizer, player);
+    }
+
+    #[test]
+    fn move_fleet_emits_moved_event() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &4);
+
+        let (contract, topics, data) = env
+            .events()
+            .all()
+            .into_iter()
+            .filter(|(c, _, _)| *c == fx.client.address)
+            .last()
+            .unwrap();
+        assert_eq!(contract, fx.client.address);
+        assert_eq!(topics, (symbol_short!("moved"), player).into_val(&env));
+        let payload: (u32, u32) = data.into_val(&env);
+        assert_eq!(payload, (0, 4));
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet is empty")]
+    fn move_fleet_panics_when_fleet_is_empty() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        env.ledger().set_timestamp(1_000);
+
+        fx.client.move_fleet(&player, &1);
+    }
+
+    #[test]
+    #[should_panic(expected = "target system is not adjacent")]
+    fn move_fleet_panics_when_target_is_not_adjacent() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &5);
+    }
+
+    #[test]
+    #[should_panic(expected = "target system is outside the galaxy")]
+    fn move_fleet_panics_when_target_is_outside_the_grid() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &16);
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet is on cooldown")]
+    fn move_fleet_panics_before_cooldown_has_elapsed() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+        fx.client.move_fleet(&player, &1);
+
+        env.ledger().set_timestamp(1_000 + MOVE_COOLDOWN_SECONDS - 1);
+        fx.client.move_fleet(&player, &2);
+    }
+
+    #[test]
+    fn move_fleet_succeeds_once_cooldown_has_elapsed() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+        fx.client.move_fleet(&player, &1);
+
+        env.ledger().set_timestamp(1_000 + MOVE_COOLDOWN_SECONDS);
+        fx.client.move_fleet(&player, &2);
+
+        assert_eq!(fx.client.get_fleet(&player).location, 2);
+    }
+
+    #[test]
+    fn move_fleet_keeps_unit_counts() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = fleet_with_one_scout(&env, &fx);
+
+        fx.client.move_fleet(&player, &1);
+
+        assert_eq!(fx.client.get_fleet(&player).scouts, 1);
     }
 }
