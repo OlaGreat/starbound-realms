@@ -34,6 +34,13 @@ pub struct Fleet {
     pub last_moved: u64,
 }
 
+/// Resource cost, denominated in whole units of each resource token.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnitCost {
+    pub iron: i128,
+    pub energy: i128,
+}
+
 // ── Contract ──────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -73,6 +80,25 @@ impl FleetContract {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Cost of building a single unit of the given type.
+fn unit_cost(unit: &UnitType) -> UnitCost {
+    match unit {
+        UnitType::Scout => UnitCost { iron: 10, energy: 5 },
+        UnitType::Fighter => UnitCost { iron: 25, energy: 15 },
+        UnitType::Cruiser => UnitCost { iron: 60, energy: 40 },
+        UnitType::Dreadnought => UnitCost { iron: 150, energy: 100 },
+    }
+}
+
+/// Cost of building `count` units of the given type.
+fn total_build_cost(unit: &UnitType, count: u32) -> UnitCost {
+    let single = unit_cost(unit);
+    UnitCost {
+        iron: single.iron * count as i128,
+        energy: single.energy * count as i128,
+    }
+}
 
 fn empty_fleet() -> Fleet {
     Fleet {
@@ -123,5 +149,21 @@ mod tests {
         let admin = Address::generate(&env);
 
         client.initialize(&admin, &resources);
+    }
+
+    #[test]
+    fn unit_cost_matches_the_game_mechanics_table() {
+        assert_eq!(unit_cost(&UnitType::Scout), UnitCost { iron: 10, energy: 5 });
+        assert_eq!(unit_cost(&UnitType::Fighter), UnitCost { iron: 25, energy: 15 });
+        assert_eq!(unit_cost(&UnitType::Cruiser), UnitCost { iron: 60, energy: 40 });
+        assert_eq!(unit_cost(&UnitType::Dreadnought), UnitCost { iron: 150, energy: 100 });
+    }
+
+    #[test]
+    fn total_build_cost_multiplies_unit_cost_by_count() {
+        assert_eq!(
+            total_build_cost(&UnitType::Fighter, 4),
+            UnitCost { iron: 100, energy: 60 }
+        );
     }
 }
