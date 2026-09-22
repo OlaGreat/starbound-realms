@@ -7,8 +7,10 @@ use soroban_sdk::{contract, contractclient, contractimpl, contracttype, symbol_s
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Admin,
     ResourcesContract,
     GalaxyMapContract,
+    BattleContract,
     Fleet(Address),
     Initialized,
 }
@@ -92,6 +94,7 @@ impl FleetContract {
             panic!("already initialized");
         }
 
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::ResourcesContract, &resources_contract);
@@ -137,6 +140,33 @@ impl FleetContract {
             .publish((symbol_short!("moved"), player), (from, target_system_id));
     }
 
+    /// Registers the battle contract allowed to call `apply_battle_losses`. Admin only.
+    pub fn set_battle_contract(env: Env, caller: Address, battle_contract: Address) {
+        caller.require_auth();
+        verify_caller_is_admin(&env, &caller);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::BattleContract, &battle_contract);
+    }
+
+    /// Reduces a player's fleet by the given per-unit losses, clamped at zero.
+    /// Callable only by the registered battle contract.
+    pub fn apply_battle_losses(env: Env, caller: Address, player: Address, losses: Fleet) {
+        caller.require_auth();
+        verify_caller_is_battle_contract(&env, &caller);
+
+        let mut fleet = get_stored_fleet(&env, &player);
+        fleet.scouts = fleet.scouts.saturating_sub(losses.scouts);
+        fleet.fighters = fleet.fighters.saturating_sub(losses.fighters);
+        fleet.cruisers = fleet.cruisers.saturating_sub(losses.cruisers);
+        fleet.dreadnoughts = fleet.dreadnoughts.saturating_sub(losses.dreadnoughts);
+        save_fleet(&env, &player, &fleet);
+
+        env.events()
+            .publish((symbol_short!("losses"), player), losses);
+    }
+
     // ── View functions ────────────────────────────────────────────────────────
 
     /// Returns a player's fleet, or an empty fleet if they have none.
@@ -146,6 +176,38 @@ impl FleetContract {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Returns the fleet's total attack power (sum of each unit's attack stat).
+pub fn calculate_fleet_attack(fleet: &Fleet) -> u32 {
+    fleet.scouts * 2 + fleet.fighters * 5 + fleet.cruisers * 12 + fleet.dreadnoughts * 30
+}
+
+/// Returns the fleet's total defense power (sum of each unit's defense stat).
+pub fn calculate_fleet_defense(fleet: &Fleet) -> u32 {
+    fleet.scouts * 1 + fleet.fighters * 3 + fleet.cruisers * 8 + fleet.dreadnoughts * 20
+}
+
+fn verify_caller_is_admin(env: &Env, caller: &Address) {
+    let admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .expect("not initialized");
+    if *caller != admin {
+        panic!("caller is not the admin");
+    }
+}
+
+fn verify_caller_is_battle_contract(env: &Env, caller: &Address) {
+    let battle_contract: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::BattleContract)
+        .expect("battle contract not set");
+    if *caller != battle_contract {
+        panic!("caller is not the registered battle contract");
+    }
+}
 
 fn is_fleet_empty(fleet: &Fleet) -> bool {
     fleet.scouts == 0 && fleet.fighters == 0 && fleet.cruisers == 0 && fleet.dreadnoughts == 0
@@ -268,6 +330,24 @@ mod tests {
     use soroban_sdk::testutils::{Address as _, Events, Ledger as _};
     use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, IntoVal, Vec};
 
+    /// Stand-in for a trusted battle contract, used to prove the caller-
+    /// restriction on `apply_battle_losses` behaves as intended.
+    #[contract]
+    struct MockBattle;
+
+    #[contractimpl]
+    impl MockBattle {
+        /// Calls back into the real fleet contract as *this* contract's own
+        /// address, the way the real battle contract will.
+        pub fn trigger_losses(env: Env, fleet_contract: Address, player: Address, losses: Fleet) {
+            FleetContractClient::new(&env, &fleet_contract).apply_battle_losses(
+                &env.current_contract_address(),
+                &player,
+                &losses,
+            );
+        }
+    }
+
     /// Stand-in for the resources contract that records every burn it receives.
     #[contract]
     struct MockResources;
@@ -307,6 +387,7 @@ mod tests {
     struct Fixture<'a> {
         client: FleetContractClient<'a>,
         resources: MockResourcesClient<'a>,
+        admin: Address,
     }
 
     fn setup_fleet(env: &Env) -> Fixture<'_> {
@@ -317,7 +398,15 @@ mod tests {
         let client = FleetContractClient::new(env, &contract_id);
         let admin = Address::generate(env);
         client.initialize(&admin, &resources_id, &galaxy_id);
-        Fixture { client, resources: MockResourcesClient::new(env, &resources_id) }
+        Fixture { client, resources: MockResourcesClient::new(env, &resources_id), admin }
+    }
+
+    /// Registers a mock battle contract on an already-initialized fixture and
+    /// returns a client for it.
+    fn register_battle_contract<'a>(env: &'a Env, fx: &Fixture<'a>) -> MockBattleClient<'a> {
+        let battle_id = env.register(MockBattle, ());
+        fx.client.set_battle_contract(&fx.admin, &battle_id);
+        MockBattleClient::new(env, &battle_id)
     }
 
     #[test]
@@ -639,5 +728,156 @@ mod tests {
         fx.client.move_fleet(&player, &1);
 
         assert_eq!(fx.client.get_fleet(&player).scouts, 1);
+    }
+
+    // ── fleet power ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn calculate_fleet_attack_sums_each_units_attack_stat() {
+        let fleet = Fleet { scouts: 1, fighters: 1, cruisers: 1, dreadnoughts: 1, ..empty_fleet() };
+        assert_eq!(calculate_fleet_attack(&fleet), 2 + 5 + 12 + 30);
+    }
+
+    #[test]
+    fn calculate_fleet_attack_is_zero_for_an_empty_fleet() {
+        assert_eq!(calculate_fleet_attack(&empty_fleet()), 0);
+    }
+
+    #[test]
+    fn calculate_fleet_defense_sums_each_units_defense_stat() {
+        let fleet = Fleet { scouts: 1, fighters: 1, cruisers: 1, dreadnoughts: 1, ..empty_fleet() };
+        assert_eq!(calculate_fleet_defense(&fleet), 1 + 3 + 8 + 20);
+    }
+
+    #[test]
+    fn calculate_fleet_defense_is_zero_for_an_empty_fleet() {
+        assert_eq!(calculate_fleet_defense(&empty_fleet()), 0);
+    }
+
+    // ── set_battle_contract ───────────────────────────────────────────────────
+
+    #[test]
+    fn set_battle_contract_requires_admin_authorization() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let battle_id = env.register(MockBattle, ());
+
+        fx.client.set_battle_contract(&fx.admin, &battle_id);
+
+        let (authorizer, _) = env.auths().into_iter().last().unwrap();
+        assert_eq!(authorizer, fx.admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the admin")]
+    fn set_battle_contract_panics_for_non_admin_caller() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let stranger = Address::generate(&env);
+        let battle_id = env.register(MockBattle, ());
+
+        fx.client.set_battle_contract(&stranger, &battle_id);
+    }
+
+    // ── apply_battle_losses ───────────────────────────────────────────────────
+
+    fn losses(scouts: u32) -> Fleet {
+        Fleet { scouts, ..empty_fleet() }
+    }
+
+    #[test]
+    fn apply_battle_losses_reduces_the_players_fleet() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let battle = register_battle_contract(&env, &fx);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &5);
+
+        battle.trigger_losses(&fx.client.address, &player, &losses(2));
+
+        assert_eq!(fx.client.get_fleet(&player).scouts, 3);
+    }
+
+    #[test]
+    fn apply_battle_losses_clamps_at_zero() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let battle = register_battle_contract(&env, &fx);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &2);
+
+        battle.trigger_losses(&fx.client.address, &player, &losses(5));
+
+        assert_eq!(fx.client.get_fleet(&player).scouts, 0);
+    }
+
+    #[test]
+    fn apply_battle_losses_reduces_each_unit_type_independently() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let battle = register_battle_contract(&env, &fx);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &5);
+        fx.client.build_unit(&player, &UnitType::Fighter, &5);
+        fx.client.build_unit(&player, &UnitType::Cruiser, &5);
+        fx.client.build_unit(&player, &UnitType::Dreadnought, &5);
+
+        battle.trigger_losses(
+            &fx.client.address,
+            &player,
+            &Fleet { scouts: 1, fighters: 2, cruisers: 3, dreadnoughts: 4, location: 0, last_moved: 0 },
+        );
+
+        let fleet = fx.client.get_fleet(&player);
+        assert_eq!(
+            (fleet.scouts, fleet.fighters, fleet.cruisers, fleet.dreadnoughts),
+            (4, 3, 2, 1)
+        );
+    }
+
+    #[test]
+    fn apply_battle_losses_emits_losses_event() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let battle = register_battle_contract(&env, &fx);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &5);
+
+        battle.trigger_losses(&fx.client.address, &player, &losses(2));
+
+        let (contract, topics, data) = env
+            .events()
+            .all()
+            .into_iter()
+            .filter(|(c, _, _)| *c == fx.client.address)
+            .last()
+            .unwrap();
+        assert_eq!(contract, fx.client.address);
+        assert_eq!(topics, (symbol_short!("losses"), player).into_val(&env));
+        let payload: Fleet = data.into_val(&env);
+        assert_eq!(payload, losses(2));
+    }
+
+    #[test]
+    #[should_panic(expected = "battle contract not set")]
+    fn apply_battle_losses_panics_when_no_battle_contract_is_registered() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+
+        fx.client.apply_battle_losses(&player, &player, &losses(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the registered battle contract")]
+    fn apply_battle_losses_panics_for_a_caller_that_is_not_the_registered_battle_contract() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        register_battle_contract(&env, &fx);
+        let impostor = env.register(MockBattle, ());
+        let impostor_client = MockBattleClient::new(&env, &impostor);
+        let player = Address::generate(&env);
+
+        impostor_client.trigger_losses(&fx.client.address, &player, &losses(1));
     }
 }
