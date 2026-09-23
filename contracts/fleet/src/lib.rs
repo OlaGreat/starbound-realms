@@ -169,6 +169,16 @@ impl FleetContract {
 
     // ── View functions ────────────────────────────────────────────────────────
 
+    /// Returns a player's total attack power (0 for a player with no fleet).
+    pub fn get_fleet_attack(env: Env, player: Address) -> u32 {
+        calculate_fleet_attack(&get_stored_fleet(&env, &player))
+    }
+
+    /// Returns a player's total defense power (0 for a player with no fleet).
+    pub fn get_fleet_defense(env: Env, player: Address) -> u32 {
+        calculate_fleet_defense(&get_stored_fleet(&env, &player))
+    }
+
     /// Returns a player's fleet, or an empty fleet if they have none.
     pub fn get_fleet(env: Env, player: Address) -> Fleet {
         get_stored_fleet(&env, &player)
@@ -731,6 +741,35 @@ mod tests {
     }
 
     // ── fleet power ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_fleet_attack_returns_calculated_attack_for_the_players_stored_fleet() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Fighter, &2);
+
+        assert_eq!(fx.client.get_fleet_attack(&player), 10);
+    }
+
+    #[test]
+    fn get_fleet_attack_is_zero_for_a_player_with_no_fleet() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+
+        assert_eq!(fx.client.get_fleet_attack(&player), 0);
+    }
+
+    #[test]
+    fn get_fleet_defense_returns_calculated_defense_for_the_players_stored_fleet() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Cruiser, &2);
+
+        assert_eq!(fx.client.get_fleet_defense(&player), 16);
+    }
 
     #[test]
     fn calculate_fleet_attack_sums_each_units_attack_stat() {
