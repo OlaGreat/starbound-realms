@@ -9,9 +9,11 @@ use soroban_sdk::{
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Admin,
     System(u32),
     PlayerSystems(Address),
     GridSize,
+    BattleContract,
     Initialized,
 }
 
@@ -58,6 +60,7 @@ impl GalaxyMapContract {
             panic!("already initialized");
         }
 
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::GridSize, &grid_size);
@@ -145,6 +148,44 @@ impl GalaxyMapContract {
         );
     }
 
+    /// Registers the battle contract allowed to call `transfer_ownership_after_battle`. Admin only.
+    pub fn set_battle_contract(env: Env, caller: Address, battle_contract: Address) {
+        caller.require_auth();
+        verify_caller_is_admin(&env, &caller);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::BattleContract, &battle_contract);
+    }
+
+    /// Force-transfers a system away from its current owner. Callable only by
+    /// the registered battle contract, for handing a conquered system to the
+    /// battle's winner without the defeated owner's cooperation.
+    pub fn transfer_ownership_after_battle(env: Env, caller: Address, system_id: u32, new_owner: Address) {
+        caller.require_auth();
+        verify_caller_is_battle_contract(&env, &caller);
+
+        let mut system: StarSystem = env
+            .storage()
+            .persistent()
+            .get(&DataKey::System(system_id))
+            .expect("system not found");
+        let old_owner = system.owner.clone();
+
+        system.owner = Some(new_owner.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::System(system_id), &system);
+
+        if let Some(previous) = &old_owner {
+            remove_system_from_player_list(&env, previous, system_id);
+        }
+        add_system_to_player_list(&env, &new_owner, system_id);
+
+        env.events()
+            .publish((symbol_short!("transfer"), system_id), (old_owner, new_owner));
+    }
+
     // ── View functions ────────────────────────────────────────────────────────
 
     pub fn get_system(env: Env, system_id: u32) -> StarSystem {
@@ -172,6 +213,28 @@ impl GalaxyMapContract {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Panics unless `caller` owns the system; returns the owner on success.
+fn verify_caller_is_admin(env: &Env, caller: &Address) {
+    let admin: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .expect("not initialized");
+    if *caller != admin {
+        panic!("caller is not the admin");
+    }
+}
+
+fn verify_caller_is_battle_contract(env: &Env, caller: &Address) {
+    let battle_contract: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::BattleContract)
+        .expect("battle contract not set");
+    if *caller != battle_contract {
+        panic!("caller is not the registered battle contract");
+    }
+}
+
 fn verify_system_is_owned_by(system: &StarSystem, caller: &Address) -> Address {
     match &system.owner {
         None => panic!("system is not owned"),
@@ -218,6 +281,32 @@ mod tests {
         let admin = Address::generate(env);
         client.initialize(&admin, &4);
         (client, admin)
+    }
+
+    /// Stand-in for a trusted battle contract, used to prove the caller-
+    /// restriction on the battle-initiated transfer path behaves as intended.
+    #[contract]
+    struct MockBattle;
+
+    #[contractimpl]
+    impl MockBattle {
+        pub fn trigger_transfer(env: Env, galaxy: Address, system_id: u32, new_owner: Address) {
+            GalaxyMapContractClient::new(&env, &galaxy).transfer_ownership_after_battle(
+                &env.current_contract_address(),
+                &system_id,
+                &new_owner,
+            );
+        }
+    }
+
+    fn register_battle_contract<'a>(
+        env: &'a Env,
+        client: &GalaxyMapContractClient<'a>,
+        admin: &Address,
+    ) -> MockBattleClient<'a> {
+        let battle_id = env.register(MockBattle, ());
+        client.set_battle_contract(admin, &battle_id);
+        MockBattleClient::new(env, &battle_id)
     }
 
     #[test]
@@ -422,5 +511,99 @@ mod tests {
         let (client, _) = setup_galaxy(&env);
 
         client.get_system(&99);
+    }
+
+    // ── set_battle_contract ───────────────────────────────────────────────────
+
+    #[test]
+    fn set_battle_contract_requires_admin_authorization() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+        let battle = register_battle_contract(&env, &client, &admin);
+        let _ = battle;
+
+        let (authorizer, _) = env.auths().into_iter().next().unwrap();
+        assert_eq!(authorizer, admin);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the admin")]
+    fn set_battle_contract_panics_for_non_admin_caller() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let stranger = Address::generate(&env);
+        let battle_id = env.register(MockBattle, ());
+
+        client.set_battle_contract(&stranger, &battle_id);
+    }
+
+    // ── transfer_ownership_after_battle ──────────────────────────────────────
+
+    #[test]
+    fn registered_battle_contract_can_transfer_a_system_away_from_its_owner() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+        let battle = register_battle_contract(&env, &client, &admin);
+        let owner = Address::generate(&env);
+        let winner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        battle.trigger_transfer(&client.address, &3, &winner);
+
+        assert_eq!(client.get_system(&3).owner, Some(winner));
+    }
+
+    #[test]
+    fn battle_transfer_updates_both_players_system_lists() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+        let battle = register_battle_contract(&env, &client, &admin);
+        let owner = Address::generate(&env);
+        let winner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        battle.trigger_transfer(&client.address, &3, &winner);
+
+        assert_eq!(client.get_player_systems(&owner).len(), 0);
+        assert_eq!(client.get_player_systems(&winner), vec![&env, 3u32]);
+    }
+
+    #[test]
+    #[should_panic(expected = "battle contract not set")]
+    fn transfer_ownership_after_battle_panics_when_no_battle_contract_is_registered() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership_after_battle(&owner, &3, &owner);
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the registered battle contract")]
+    fn transfer_ownership_after_battle_panics_for_an_unregistered_caller() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+        register_battle_contract(&env, &client, &admin);
+        let owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+        let impostor = env.register(MockBattle, ());
+        let impostor_client = MockBattleClient::new(&env, &impostor);
+
+        // impostor was never registered via set_battle_contract
+        impostor_client.trigger_transfer(&client.address, &3, &owner);
+    }
+
+    #[test]
+    fn regular_transfer_ownership_still_requires_the_current_owner() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        client.claim_system(&owner, &3);
+
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        assert_eq!(client.get_system(&3).owner, Some(new_owner));
     }
 }
