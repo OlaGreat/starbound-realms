@@ -1,3 +1,4 @@
+import { nativeToScVal } from '@stellar/stellar-sdk';
 import { StarboundClient } from './client';
 
 export type UnitType = 'Scout' | 'Fighter' | 'Cruiser' | 'Dreadnought';
@@ -57,12 +58,36 @@ export function isFleetEmpty(fleet: Fleet): boolean {
   );
 }
 
+/** The raw shape scValToNative produces for the contract's Fleet struct. */
+interface RawFleet {
+  scouts: number;
+  fighters: number;
+  cruisers: number;
+  dreadnoughts: number;
+  location: number;
+  last_moved: number;
+}
+
+/** Maps the contract's snake_case Fleet field to the SDK's camelCase shape. */
+function toFleet(raw: RawFleet): Fleet {
+  return {
+    scouts: raw.scouts,
+    fighters: raw.fighters,
+    cruisers: raw.cruisers,
+    dreadnoughts: raw.dreadnoughts,
+    location: raw.location,
+    lastMoved: raw.last_moved,
+  };
+}
+
 export class FleetClient {
   constructor(private readonly client: StarboundClient) {}
 
   /** Fetch a player's current fleet from the chain */
   async getFleet(playerAddress: string): Promise<Fleet> {
-    // TODO: call fleet.get_fleet via Soroban RPC
-    throw new Error('getFleet: not yet implemented');
+    const raw = await this.client.simulateReadCall(this.client.contractIds.fleet, 'get_fleet', [
+      nativeToScVal(playerAddress, { type: 'address' }),
+    ]);
+    return toFleet(raw);
   }
 }

@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { Keypair } from '@stellar/stellar-sdk';
 import {
   getUnitCost,
   calculateFleetAttack,
   calculateFleetDefense,
   isFleetEmpty,
   Fleet,
+  FleetClient,
 } from './fleet';
 
 // ── getUnitCost ───────────────────────────────────────────────────────────────
@@ -106,3 +108,47 @@ function emptyFleet(): Fleet {
     lastMoved: 0,
   };
 }
+
+// ── FleetClient.getFleet ─────────────────────────────────────────────────────
+
+const PLAYER = Keypair.random().publicKey();
+
+function makeClient(simulateReadCall: ReturnType<typeof vi.fn>): any {
+  return { simulateReadCall, contractIds: { fleet: 'CFLEET' } };
+}
+
+describe('FleetClient.getFleet', () => {
+  it("maps the contract's snake_case last_moved field to the SDK's camelCase shape", async () => {
+    const simulateReadCall = vi.fn().mockResolvedValue({
+      scouts: 2,
+      fighters: 1,
+      cruisers: 0,
+      dreadnoughts: 0,
+      location: 5,
+      last_moved: 1000,
+    });
+    const fleetClient = new FleetClient(makeClient(simulateReadCall));
+
+    const fleet = await fleetClient.getFleet(PLAYER);
+
+    expect(fleet).toEqual({
+      scouts: 2,
+      fighters: 1,
+      cruisers: 0,
+      dreadnoughts: 0,
+      location: 5,
+      lastMoved: 1000,
+    });
+  });
+
+  it('calls get_fleet with the player address', async () => {
+    const simulateReadCall = vi.fn().mockResolvedValue({
+      scouts: 0, fighters: 0, cruisers: 0, dreadnoughts: 0, location: 0, last_moved: 0,
+    });
+    const fleetClient = new FleetClient(makeClient(simulateReadCall));
+
+    await fleetClient.getFleet(PLAYER);
+
+    expect(simulateReadCall).toHaveBeenCalledWith('CFLEET', 'get_fleet', [expect.anything()]);
+  });
+});
