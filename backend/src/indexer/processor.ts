@@ -58,7 +58,9 @@ async function processOwnershipTransferred(db: Pool, event: ContractEvent): Prom
 
 /** Handles battle_resolved event — saves battle record and updates player win/loss counts */
 async function processBattleResolved(db: Pool, event: ContractEvent): Promise<void> {
-  const { battleId, attacker, defender, systemId, winner, rounds } = event.value;
+  // Field names match the Rust BattleResult struct's actual encoding
+  // (snake_case), not a JS naming convention.
+  const { battle_id, attacker, defender, system_id, winner, rounds } = event.value;
 
-  await saveBattle(db, battleId, attacker, defender, systemId, winner, rounds, event.ledgerSequence);
+  await saveBattle(db, battle_id, attacker, defender, system_id, winner, rounds, event.ledgerSequence);
 }

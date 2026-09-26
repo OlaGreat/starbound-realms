@@ -89,10 +89,10 @@ describe('processEvent — battle_resolved', () => {
       contractId: 'C1',
       topic: ['battle_resolved'],
       value: {
-        battleId: 5,
+        battle_id: 5,
         attacker: 'GATTACKER',
         defender: 'GDEFENDER',
-        systemId: 9,
+        system_id: 9,
         winner: 'GATTACKER',
         rounds: 3,
       },
