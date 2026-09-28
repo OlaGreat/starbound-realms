@@ -45,7 +45,7 @@ describe('getSystem', () => {
       resource_type: 'Iron',
       resource_yield: 25,
       defense_rating: 12,
-      last_claimed: 1000,
+      last_claimed: 1000n,
     });
     const galaxy = new GalaxyClient(makeClient(simulateReadCall));
 
@@ -71,7 +71,7 @@ describe('getSystem', () => {
       resource_type: 'Plasma',
       resource_yield: 10,
       defense_rating: 5,
-      last_claimed: 0,
+      last_claimed: 0n,
     });
     const galaxy = new GalaxyClient(makeClient(simulateReadCall));
 
@@ -88,7 +88,7 @@ describe('getSystem', () => {
       resource_type: 'Iron',
       resource_yield: 10,
       defense_rating: 5,
-      last_claimed: 0,
+      last_claimed: 0n,
     });
     const galaxy = new GalaxyClient(makeClient(simulateReadCall));
 

@@ -65,7 +65,7 @@ interface RawFleet {
   cruisers: number;
   dreadnoughts: number;
   location: number;
-  last_moved: number;
+  last_moved: bigint; // u64 decodes to bigint
 }
 
 /** Maps the contract's snake_case Fleet field to the SDK's camelCase shape. */
@@ -76,7 +76,7 @@ function toFleet(raw: RawFleet): Fleet {
     cruisers: raw.cruisers,
     dreadnoughts: raw.dreadnoughts,
     location: raw.location,
-    lastMoved: raw.last_moved,
+    lastMoved: Number(raw.last_moved),
   };
 }
 

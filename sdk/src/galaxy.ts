@@ -20,7 +20,7 @@ interface RawStarSystem {
   resource_type: 'Iron' | 'Energy' | 'Plasma';
   resource_yield: number;
   defense_rating: number;
-  last_claimed: number;
+  last_claimed: bigint; // u64 decodes to bigint
 }
 
 /** Maps the contract's snake_case StarSystem fields to the SDK's camelCase shape. */
@@ -33,7 +33,7 @@ function toStarSystem(systemId: number, raw: RawStarSystem): StarSystem {
     resourceType: raw.resource_type,
     resourceYield: raw.resource_yield,
     defenseRating: raw.defense_rating,
-    lastClaimed: raw.last_claimed,
+    lastClaimed: Number(raw.last_claimed),
   };
 }
 

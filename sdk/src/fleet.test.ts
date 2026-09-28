@@ -125,7 +125,7 @@ describe('FleetClient.getFleet', () => {
       cruisers: 0,
       dreadnoughts: 0,
       location: 5,
-      last_moved: 1000,
+      last_moved: 1000n,
     });
     const fleetClient = new FleetClient(makeClient(simulateReadCall));
 
@@ -143,7 +143,7 @@ describe('FleetClient.getFleet', () => {
 
   it('calls get_fleet with the player address', async () => {
     const simulateReadCall = vi.fn().mockResolvedValue({
-      scouts: 0, fighters: 0, cruisers: 0, dreadnoughts: 0, location: 0, last_moved: 0,
+      scouts: 0, fighters: 0, cruisers: 0, dreadnoughts: 0, location: 0, last_moved: 0n,
     });
     const fleetClient = new FleetClient(makeClient(simulateReadCall));
 
