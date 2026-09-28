@@ -1,4 +1,4 @@
-import { Contract } from '@stellar/stellar-sdk';
+import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { StarboundClient } from './client';
 
 export type ResourceType = 'Iron' | 'Energy' | 'Plasma';
@@ -9,13 +9,20 @@ export interface ResourceBalance {
   amount: bigint;
 }
 
+/** Encodes a resource as Soroban does a unit enum variant: a vec holding the variant name as a symbol. */
+export function resourceTypeToScVal(resource: ResourceType): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(resource)]);
+}
+
 export class ResourcesClient {
   constructor(private readonly client: StarboundClient) {}
 
   /** Get a player's balance for a given resource type */
   async getBalance(playerAddress: string, resource: ResourceType): Promise<bigint> {
-    // TODO: call resources.balance via Soroban RPC
-    throw new Error('getBalance: not yet implemented');
+    return this.client.simulateReadCall(this.client.contractIds.resources, 'balance', [
+      nativeToScVal(playerAddress, { type: 'address' }),
+      resourceTypeToScVal(resource),
+    ]);
   }
 
   /** Get all three resource balances for a player in one call */
