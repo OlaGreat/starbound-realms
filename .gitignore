@@ -2,6 +2,7 @@
 target/
 **/*.rs.bk
 *.wasm
+**/test_snapshots/
 
 # ── Node / pnpm ───────────────────────────────────────────────────────────────
 node_modules/
