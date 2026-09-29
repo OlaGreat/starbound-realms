@@ -6,9 +6,19 @@ import {
   Networks,
   rpc,
   scValToNative,
+  Transaction,
   TransactionBuilder,
   xdr,
 } from '@stellar/stellar-sdk';
+
+/** Signs an unsigned transaction XDR string and returns the signed XDR string. */
+export type TransactionSigner = (xdr: string) => Promise<string>;
+
+export interface WriteCallOptions {
+  sourceAddress: string;
+  operation: xdr.Operation;
+  sign: TransactionSigner;
+}
 
 export interface ContractIds {
   galaxyMap: string;
@@ -52,6 +62,56 @@ export class StarboundClient {
     const simulation = await this.server.simulateTransaction(tx);
     return decodeSimulationResult(method, simulation);
   }
+
+  /**
+   * Builds, simulates, signs, submits, and confirms a write call. `sign`
+   * never sees a private key here — it's the caller's job to actually sign
+   * (Freighter in the frontend, a Keypair in a script), keeping this client
+   * signer-agnostic.
+   */
+  async submitTransaction(options: WriteCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
+    const account = await this.server.getAccount(options.sourceAddress);
+    const unprepared = buildUnpreparedTransaction(this.networkPassphrase, account, options.operation);
+    const prepared = await this.server.prepareTransaction(unprepared);
+
+    const signedXdr = await options.sign(prepared.toXDR());
+    const signedTx = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase) as Transaction;
+
+    const sendResult = await this.server.sendTransaction(signedTx);
+    verifySendWasAccepted(sendResult);
+
+    const finalResult = await this.server.pollTransaction(sendResult.hash);
+    return verifyTransactionSucceeded(finalResult);
+  }
+}
+
+/** Builds an unprepared (unsimulated) transaction for a single contract call. */
+function buildUnpreparedTransaction(
+  networkPassphrase: string,
+  account: Account,
+  operation: xdr.Operation
+): ReturnType<TransactionBuilder['build']> {
+  return new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase })
+    .addOperation(operation)
+    .setTimeout(30)
+    .build();
+}
+
+/** Throws if the network didn't accept the transaction for processing. */
+function verifySendWasAccepted(send: rpc.Api.SendTransactionResponse): void {
+  if (send.status !== 'PENDING' && send.status !== 'DUPLICATE') {
+    throw new Error(`transaction rejected: ${send.status}`);
+  }
+}
+
+/** Throws if the confirmed transaction failed on-chain; otherwise returns it. */
+function verifyTransactionSucceeded(
+  result: rpc.Api.GetTransactionResponse
+): rpc.Api.GetSuccessfulTransactionResponse {
+  if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw new Error(`transaction failed: ${result.status}`);
+  }
+  return result;
 }
 
 /** Builds a throwaway, never-submitted transaction for simulating a read call. */
