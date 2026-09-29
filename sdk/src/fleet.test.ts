@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import {
   getUnitCost,
   calculateFleetAttack,
@@ -7,6 +7,7 @@ import {
   isFleetEmpty,
   Fleet,
   FleetClient,
+  unitTypeToScVal,
 } from './fleet';
 
 // ── getUnitCost ───────────────────────────────────────────────────────────────
@@ -112,9 +113,10 @@ function emptyFleet(): Fleet {
 // ── FleetClient.getFleet ─────────────────────────────────────────────────────
 
 const PLAYER = Keypair.random().publicKey();
+const FLEET_ID = StrKey.encodeContract(Buffer.alloc(32, 7));
 
-function makeClient(simulateReadCall: ReturnType<typeof vi.fn>): any {
-  return { simulateReadCall, contractIds: { fleet: 'CFLEET' } };
+function makeClient(overrides: Record<string, ReturnType<typeof vi.fn>>): any {
+  return { contractIds: { fleet: FLEET_ID }, ...overrides };
 }
 
 describe('FleetClient.getFleet', () => {
@@ -127,7 +129,7 @@ describe('FleetClient.getFleet', () => {
       location: 5,
       last_moved: 1000n,
     });
-    const fleetClient = new FleetClient(makeClient(simulateReadCall));
+    const fleetClient = new FleetClient(makeClient({ simulateReadCall }));
 
     const fleet = await fleetClient.getFleet(PLAYER);
 
@@ -145,10 +147,42 @@ describe('FleetClient.getFleet', () => {
     const simulateReadCall = vi.fn().mockResolvedValue({
       scouts: 0, fighters: 0, cruisers: 0, dreadnoughts: 0, location: 0, last_moved: 0n,
     });
-    const fleetClient = new FleetClient(makeClient(simulateReadCall));
+    const fleetClient = new FleetClient(makeClient({ simulateReadCall }));
 
     await fleetClient.getFleet(PLAYER);
 
-    expect(simulateReadCall).toHaveBeenCalledWith('CFLEET', 'get_fleet', [expect.anything()]);
+    expect(simulateReadCall).toHaveBeenCalledWith(FLEET_ID, 'get_fleet', [expect.anything()]);
+  });
+});
+
+// ── unitTypeToScVal ──────────────────────────────────────────────────────────
+
+describe('unitTypeToScVal', () => {
+  it('encodes a unit type as a one-symbol vec, matching resourceTypeToScVal\'s pattern', () => {
+    const scVal = unitTypeToScVal('Dreadnought');
+
+    expect(scValToNative(scVal)).toEqual(['Dreadnought']);
+  });
+});
+
+// ── FleetClient.buildUnit ────────────────────────────────────────────────────
+
+describe('FleetClient.buildUnit', () => {
+  it('submits a build_unit call for the given player, unit type, and count', async () => {
+    const submitTransaction = vi.fn().mockResolvedValue({ status: 'SUCCESS' });
+    const fleetClient = new FleetClient(makeClient({ submitTransaction }));
+    const sign = vi.fn();
+
+    await fleetClient.buildUnit(PLAYER, 'Fighter', 3, sign);
+
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+    const options = submitTransaction.mock.calls[0][0];
+    expect(options.sourceAddress).toBe(PLAYER);
+    expect(options.sign).toBe(sign);
+
+    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
+    expect(scValToNative(args[0])).toBe(PLAYER);
+    expect(scValToNative(args[1])).toEqual(['Fighter']);
+    expect(scValToNative(args[2])).toBe(3);
   });
 });

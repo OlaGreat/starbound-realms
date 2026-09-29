@@ -1,5 +1,5 @@
-import { nativeToScVal } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client';
+import { Contract, nativeToScVal, xdr } from '@stellar/stellar-sdk';
+import { StarboundClient, TransactionSigner } from './client';
 
 export type UnitType = 'Scout' | 'Fighter' | 'Cruiser' | 'Dreadnought';
 
@@ -80,6 +80,11 @@ function toFleet(raw: RawFleet): Fleet {
   };
 }
 
+/** Encodes a unit type as Soroban does a unit enum variant: a vec holding the variant name as a symbol. */
+export function unitTypeToScVal(unit: UnitType): xdr.ScVal {
+  return xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(unit)]);
+}
+
 export class FleetClient {
   constructor(private readonly client: StarboundClient) {}
 
@@ -89,5 +94,20 @@ export class FleetClient {
       nativeToScVal(playerAddress, { type: 'address' }),
     ]);
     return toFleet(raw);
+  }
+
+  /** Build `count` units of `unitType`, paying their cost in resources. */
+  async buildUnit(playerAddress: string, unitType: UnitType, count: number, sign: TransactionSigner): Promise<void> {
+    const contract = new Contract(this.client.contractIds.fleet);
+    await this.client.submitTransaction({
+      sourceAddress: playerAddress,
+      operation: contract.call(
+        'build_unit',
+        nativeToScVal(playerAddress, { type: 'address' }),
+        unitTypeToScVal(unitType),
+        nativeToScVal(count, { type: 'u32' })
+      ),
+      sign,
+    });
   }
 }
