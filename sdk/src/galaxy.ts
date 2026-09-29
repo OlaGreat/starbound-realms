@@ -1,5 +1,5 @@
-import { nativeToScVal } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client';
+import { Contract, nativeToScVal } from '@stellar/stellar-sdk';
+import { StarboundClient, TransactionSigner } from './client';
 
 export interface StarSystem {
   systemId: number;
@@ -58,5 +58,19 @@ export class GalaxyClient {
   /** Fetch the galaxy grid size */
   async getGridSize(): Promise<number> {
     return this.client.simulateReadCall(this.client.contractIds.galaxyMap, 'get_grid_size', []);
+  }
+
+  /** Claim an unclaimed star system as the given player. */
+  async claimSystem(playerAddress: string, systemId: number, sign: TransactionSigner): Promise<void> {
+    const contract = new Contract(this.client.contractIds.galaxyMap);
+    await this.client.submitTransaction({
+      sourceAddress: playerAddress,
+      operation: contract.call(
+        'claim_system',
+        nativeToScVal(playerAddress, { type: 'address' }),
+        nativeToScVal(systemId, { type: 'u32' })
+      ),
+      sign,
+    });
   }
 }

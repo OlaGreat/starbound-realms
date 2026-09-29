@@ -1,36 +1,36 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, StrKey } from '@stellar/stellar-sdk';
 import { GalaxyClient } from './galaxy';
 import { StarboundClient } from './client';
 
 const PLAYER = Keypair.random().publicKey();
+const GALAXY_MAP = StrKey.encodeContract(Buffer.alloc(32, 6));
 
-function makeClient(simulateReadCall: ReturnType<typeof vi.fn>): StarboundClient {
-  const client = { simulateReadCall, contractIds: { galaxyMap: 'CGALAXY' } } as unknown as StarboundClient;
-  return client;
+function makeClient(overrides: Record<string, ReturnType<typeof vi.fn>>): StarboundClient {
+  return { contractIds: { galaxyMap: GALAXY_MAP }, ...overrides } as unknown as StarboundClient;
 }
 
 describe('getGridSize', () => {
   it('calls get_grid_size on the galaxy-map contract and returns the number', async () => {
     const simulateReadCall = vi.fn().mockResolvedValue(20);
-    const galaxy = new GalaxyClient(makeClient(simulateReadCall));
+    const galaxy = new GalaxyClient(makeClient({ simulateReadCall }));
 
     const size = await galaxy.getGridSize();
 
     expect(size).toBe(20);
-    expect(simulateReadCall).toHaveBeenCalledWith('CGALAXY', 'get_grid_size', []);
+    expect(simulateReadCall).toHaveBeenCalledWith(GALAXY_MAP, 'get_grid_size', []);
   });
 });
 
 describe('getPlayerSystems', () => {
   it('calls get_player_systems with the player address and returns the id list', async () => {
     const simulateReadCall = vi.fn().mockResolvedValue([2, 5, 9]);
-    const galaxy = new GalaxyClient(makeClient(simulateReadCall));
+    const galaxy = new GalaxyClient(makeClient({ simulateReadCall }));
 
     const systems = await galaxy.getPlayerSystems(PLAYER);
 
     expect(systems).toEqual([2, 5, 9]);
-    expect(simulateReadCall).toHaveBeenCalledWith('CGALAXY', 'get_player_systems', [expect.anything()]);
+    expect(simulateReadCall).toHaveBeenCalledWith(GALAXY_MAP, 'get_player_systems', [expect.anything()]);
   });
 });
 
@@ -47,7 +47,7 @@ describe('getSystem', () => {
       defense_rating: 12,
       last_claimed: 1000n,
     });
-    const galaxy = new GalaxyClient(makeClient(simulateReadCall));
+    const galaxy = new GalaxyClient(makeClient({ simulateReadCall }));
 
     const system = await galaxy.getSystem(7);
 
@@ -73,7 +73,7 @@ describe('getSystem', () => {
       defense_rating: 5,
       last_claimed: 0n,
     });
-    const galaxy = new GalaxyClient(makeClient(simulateReadCall));
+    const galaxy = new GalaxyClient(makeClient({ simulateReadCall }));
 
     const system = await galaxy.getSystem(0);
 
@@ -90,10 +90,25 @@ describe('getSystem', () => {
       defense_rating: 5,
       last_claimed: 0n,
     });
-    const galaxy = new GalaxyClient(makeClient(simulateReadCall));
+    const galaxy = new GalaxyClient(makeClient({ simulateReadCall }));
 
     await galaxy.getSystem(3);
 
-    expect(simulateReadCall).toHaveBeenCalledWith('CGALAXY', 'get_system', [expect.anything()]);
+    expect(simulateReadCall).toHaveBeenCalledWith(GALAXY_MAP, 'get_system', [expect.anything()]);
+  });
+});
+
+describe('claimSystem', () => {
+  it('submits a claim_system call for the given player and system', async () => {
+    const submitTransaction = vi.fn().mockResolvedValue({ status: 'SUCCESS' });
+    const galaxy = new GalaxyClient(makeClient({ submitTransaction }));
+    const sign = vi.fn();
+
+    await galaxy.claimSystem(PLAYER, 3, sign);
+
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+    const options = submitTransaction.mock.calls[0][0];
+    expect(options.sourceAddress).toBe(PLAYER);
+    expect(options.sign).toBe(sign);
   });
 });
