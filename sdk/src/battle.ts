@@ -1,5 +1,5 @@
-import { nativeToScVal } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client';
+import { Contract, nativeToScVal, scValToNative } from '@stellar/stellar-sdk';
+import { StarboundClient, TransactionSigner } from './client';
 
 export interface BattleResult {
   battleId: number;
@@ -65,5 +65,29 @@ export class BattleClient {
       nativeToScVal(BigInt(battleId), { type: 'u64' }),
     ]);
     return toBattleResult(raw);
+  }
+
+  /**
+   * Resolve combat between the attacker's fleet and the current owner of
+   * `systemId`. Returns the id of the newly created battle record.
+   */
+  async resolveBattle(
+    attackerAddress: string,
+    defenderAddress: string,
+    systemId: number,
+    sign: TransactionSigner
+  ): Promise<number> {
+    const contract = new Contract(this.client.contractIds.battle);
+    const result = await this.client.submitTransaction({
+      sourceAddress: attackerAddress,
+      operation: contract.call(
+        'resolve_battle',
+        nativeToScVal(attackerAddress, { type: 'address' }),
+        nativeToScVal(defenderAddress, { type: 'address' }),
+        nativeToScVal(systemId, { type: 'u32' })
+      ),
+      sign,
+    });
+    return Number(scValToNative(result.returnValue!));
   }
 }

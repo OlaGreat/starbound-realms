@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { scValToNative } from '@stellar/stellar-sdk';
+import { Keypair, nativeToScVal, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import { didAttackerWin, getBattleLoser, wasBattleDecisive, BattleClient, BattleResult } from './battle';
 
 const ATTACKER = 'GATTACKER111111111111111111111111111111111111111111111111';
@@ -82,5 +82,38 @@ describe('BattleClient.getBattle', () => {
 
     expect(simulateReadCall).toHaveBeenCalledWith('CBATTLE', 'get_battle', [expect.anything()]);
     expect(scValToNative(simulateReadCall.mock.calls[0][2][0])).toBe(5n);
+  });
+});
+
+// ── BattleClient.resolveBattle ───────────────────────────────────────────────
+
+describe('BattleClient.resolveBattle', () => {
+  const BATTLE_ID = StrKey.encodeContract(Buffer.alloc(32, 8));
+  const ATTACKER_ADDR = Keypair.random().publicKey();
+  const DEFENDER_ADDR = Keypair.random().publicKey();
+
+  function makeClient(overrides: Record<string, ReturnType<typeof vi.fn>>): any {
+    return { contractIds: { battle: BATTLE_ID }, ...overrides };
+  }
+
+  it('submits a resolve_battle call and returns the decoded battle id', async () => {
+    const submitTransaction = vi.fn().mockResolvedValue({
+      status: 'SUCCESS',
+      returnValue: nativeToScVal(7n, { type: 'u64' }),
+    });
+    const battle = new BattleClient(makeClient({ submitTransaction }));
+    const sign = vi.fn();
+
+    const battleId = await battle.resolveBattle(ATTACKER_ADDR, DEFENDER_ADDR, 3, sign);
+
+    expect(battleId).toBe(7);
+    const options = submitTransaction.mock.calls[0][0];
+    expect(options.sourceAddress).toBe(ATTACKER_ADDR);
+    expect(options.sign).toBe(sign);
+
+    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
+    expect(scValToNative(args[0])).toBe(ATTACKER_ADDR);
+    expect(scValToNative(args[1])).toBe(DEFENDER_ADDR);
+    expect(scValToNative(args[2])).toBe(3);
   });
 });
