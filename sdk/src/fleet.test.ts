@@ -186,3 +186,24 @@ describe('FleetClient.buildUnit', () => {
     expect(scValToNative(args[2])).toBe(3);
   });
 });
+
+// ── FleetClient.moveFleet ────────────────────────────────────────────────────
+
+describe('FleetClient.moveFleet', () => {
+  it('submits a move_fleet call for the given player and target system', async () => {
+    const submitTransaction = vi.fn().mockResolvedValue({ status: 'SUCCESS' });
+    const fleetClient = new FleetClient(makeClient({ submitTransaction }));
+    const sign = vi.fn();
+
+    await fleetClient.moveFleet(PLAYER, 4, sign);
+
+    expect(submitTransaction).toHaveBeenCalledTimes(1);
+    const options = submitTransaction.mock.calls[0][0];
+    expect(options.sourceAddress).toBe(PLAYER);
+    expect(options.sign).toBe(sign);
+
+    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
+    expect(scValToNative(args[0])).toBe(PLAYER);
+    expect(scValToNative(args[1])).toBe(4);
+  });
+});

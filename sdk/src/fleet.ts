@@ -110,4 +110,18 @@ export class FleetClient {
       sign,
     });
   }
+
+  /** Move your fleet to an adjacent system, at most once per cooldown period. */
+  async moveFleet(playerAddress: string, targetSystemId: number, sign: TransactionSigner): Promise<void> {
+    const contract = new Contract(this.client.contractIds.fleet);
+    await this.client.submitTransaction({
+      sourceAddress: playerAddress,
+      operation: contract.call(
+        'move_fleet',
+        nativeToScVal(playerAddress, { type: 'address' }),
+        nativeToScVal(targetSystemId, { type: 'u32' })
+      ),
+      sign,
+    });
+  }
 }
