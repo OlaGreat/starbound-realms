@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useStellar } from './hooks/useStellar';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'default',
   },
+
+  walletError: {
+    color: '#fc8181',
+    fontSize: '0.85rem',
+    marginTop: '-0.75rem',
+  },
 };
 
 // ── Feature data ──────────────────────────────────────────────────────────────
@@ -234,17 +241,7 @@ const features = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-
-  const connectWallet = async () => {
-    // TODO: integrate @stellar/freighter-api
-    // const { isConnected } = await isConnected();
-    // const { address } = await requestAccess();
-    // setWalletAddress(address);
-    setWalletAddress('G...DEMO');
-    setWalletConnected(true);
-  };
+  const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet } = useStellar();
 
   return (
     <div style={styles.page}>
@@ -292,7 +289,7 @@ export default function App() {
         </p>
 
         <div style={styles.ctaGroup}>
-          {walletConnected ? (
+          {walletConnected && walletAddress ? (
             <span style={styles.walletConnected}>
               ✓ Connected — {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
             </span>
@@ -309,6 +306,8 @@ export default function App() {
             <button style={styles.btnSecondary}>View on GitHub →</button>
           </a>
         </div>
+
+        {walletError && <p style={styles.walletError}>{walletError}</p>}
 
         {/* Game loop */}
         <div style={styles.gameLoop}>
