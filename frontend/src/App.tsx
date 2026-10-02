@@ -207,7 +207,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   walletError: {
-    color: '#fc8181',
+    color: 'var(--red)',
     fontSize: '0.85rem',
     marginTop: '-0.75rem',
   },

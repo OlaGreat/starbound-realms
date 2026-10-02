@@ -1,0 +1,89 @@
+import { useEffect, useState } from 'react';
+
+export interface GalaxySystem {
+  systemId: number;
+  owner: string | null;
+  coordX: number;
+  coordY: number;
+  resourceType: 'Iron' | 'Energy' | 'Plasma';
+  resourceYield: number;
+  defenseRating: number;
+  lastClaimed: number;
+}
+
+/**
+ * The raw shape the backend's `GET /galaxy` actually returns: a Postgres row
+ * as-is (snake_case columns), with BIGINT columns (last_claimed) serialized
+ * as strings rather than numbers, per node-postgres's default type parsing.
+ */
+interface RawGalaxySystem {
+  system_id: number;
+  owner: string | null;
+  coord_x: number;
+  coord_y: number;
+  resource_type: 'Iron' | 'Energy' | 'Plasma';
+  resource_yield: number;
+  defense_rating: number;
+  last_claimed: string;
+}
+
+/** Maps the backend's snake_case row to the frontend's camelCase shape. */
+function toGalaxySystem(raw: RawGalaxySystem): GalaxySystem {
+  return {
+    systemId: raw.system_id,
+    owner: raw.owner,
+    coordX: raw.coord_x,
+    coordY: raw.coord_y,
+    resourceType: raw.resource_type,
+    resourceYield: raw.resource_yield,
+    defenseRating: raw.defense_rating,
+    lastClaimed: Number(raw.last_claimed),
+  };
+}
+
+export interface UseGalaxyDataResult {
+  systems: GalaxySystem[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+/** Fetches the galaxy grid from the backend's read API. */
+export function useGalaxyData(backendUrl: string): UseGalaxyDataResult {
+  const [systems, setSystems] = useState<GalaxySystem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`${backendUrl}/galaxy`);
+        if (!response.ok) {
+          throw new Error(`failed to fetch galaxy: ${response.status}`);
+        }
+        const { systems: raw } = (await response.json()) as { systems: RawGalaxySystem[] };
+        if (!cancelled) {
+          setSystems(raw.map(toGalaxySystem));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [backendUrl]);
+
+  return { systems, isLoading, error };
+}
