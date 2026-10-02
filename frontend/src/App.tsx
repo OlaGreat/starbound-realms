@@ -1,5 +1,9 @@
 import React from 'react';
 import { useStellar } from './hooks/useStellar';
+import { useGalaxyData } from './hooks/useGalaxyData';
+import { GalaxyMap } from './components/GalaxyMap';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +215,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.85rem',
     marginTop: '-0.75rem',
   },
+
+  galaxySection: {
+    maxWidth: '900px',
+    width: '100%',
+    margin: '3rem auto 0',
+    padding: '0 2rem',
+  },
+
+  galaxyTitle: {
+    fontSize: '1.1rem',
+    fontWeight: 700,
+    marginBottom: '1rem',
+    color: 'var(--text)',
+  },
+
+  textMuted: {
+    color: 'var(--text-muted)',
+    fontSize: '0.9rem',
+  },
 };
 
 // ── Feature data ──────────────────────────────────────────────────────────────
@@ -242,6 +265,7 @@ const features = [
 
 export default function App() {
   const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet } = useStellar();
+  const { systems, isLoading: galaxyLoading, error: galaxyError } = useGalaxyData(BACKEND_URL);
 
   return (
     <div style={styles.page}>
@@ -321,6 +345,19 @@ export default function App() {
           )}
         </div>
       </section>
+
+      {/* Galaxy map — only meaningful once a wallet is connected, since the
+          whole point is coloring systems by ownership relative to you. */}
+      {walletConnected && (
+        <section style={styles.galaxySection}>
+          <h2 style={styles.galaxyTitle}>The Galaxy</h2>
+          {galaxyLoading && <p style={styles.textMuted}>Loading galaxy...</p>}
+          {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
+          {!galaxyLoading && !galaxyError && (
+            <GalaxyMap systems={systems} walletAddress={walletAddress} />
+          )}
+        </section>
+      )}
 
       {/* Features */}
       <div style={styles.features}>
