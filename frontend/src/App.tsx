@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { GalaxyMap } from './components/GalaxyMap';
+import { StarSystem } from './components/StarSystem';
 import { truncateAddress } from './lib/format';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
@@ -267,6 +268,8 @@ const features = [
 export default function App() {
   const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet } = useStellar();
   const { systems, isLoading: galaxyLoading, error: galaxyError } = useGalaxyData(BACKEND_URL);
+  const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
+  const selectedSystem = systems.find((s) => s.systemId === selectedSystemId) ?? null;
 
   return (
     <div style={styles.page}>
@@ -355,7 +358,14 @@ export default function App() {
           {galaxyLoading && <p style={styles.textMuted}>Loading galaxy...</p>}
           {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
           {!galaxyLoading && !galaxyError && (
-            <GalaxyMap systems={systems} walletAddress={walletAddress} />
+            <>
+              <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={setSelectedSystemId} />
+              <StarSystem
+                system={selectedSystem}
+                walletAddress={walletAddress}
+                onClose={() => setSelectedSystemId(null)}
+              />
+            </>
           )}
         </section>
       )}
