@@ -2,6 +2,7 @@ import React from 'react';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { GalaxyMap } from './components/GalaxyMap';
+import { truncateAddress } from './lib/format';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
 
@@ -315,7 +316,7 @@ export default function App() {
         <div style={styles.ctaGroup}>
           {walletConnected && walletAddress ? (
             <span style={styles.walletConnected}>
-              ✓ Connected — {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              ✓ Connected — {walletAddress && truncateAddress(walletAddress)}
             </span>
           ) : (
             <button style={styles.btnPrimary} onClick={connectWallet}>
