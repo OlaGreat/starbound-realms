@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface GalaxySystem {
   systemId: number;
@@ -45,6 +45,8 @@ export interface UseGalaxyDataResult {
   systems: GalaxySystem[];
   isLoading: boolean;
   error: string | null;
+  /** Re-fetches the galaxy grid — call after a write (e.g. claiming a system) to refresh the view. */
+  refetch: () => Promise<void>;
 }
 
 /** Fetches the galaxy grid from the backend's read API. */
@@ -52,38 +54,38 @@ export function useGalaxyData(backendUrl: string): UseGalaxyDataResult {
   const [systems, setSystems] = useState<GalaxySystem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`${backendUrl}/galaxy`);
-        if (!response.ok) {
-          throw new Error(`failed to fetch galaxy: ${response.status}`);
-        }
-        const { systems: raw } = (await response.json()) as { systems: RawGalaxySystem[] };
-        if (!cancelled) {
-          setSystems(raw.map(toGalaxySystem));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${backendUrl}/galaxy`);
+      if (!response.ok) {
+        throw new Error(`failed to fetch galaxy: ${response.status}`);
+      }
+      const { systems: raw } = (await response.json()) as { systems: RawGalaxySystem[] };
+      if (isMounted.current) {
+        setSystems(raw.map(toGalaxySystem));
+      }
+    } catch (err) {
+      if (isMounted.current) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (isMounted.current) {
+        setIsLoading(false);
       }
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, [backendUrl]);
 
-  return { systems, isLoading, error };
+  useEffect(() => {
+    isMounted.current = true;
+    load();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [load]);
+
+  return { systems, isLoading, error, refetch: load };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useGalaxyData } from './useGalaxyData';
 
 beforeEach(() => {
@@ -87,5 +87,24 @@ describe('useGalaxyData', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.error).toMatch(/network down/);
+  });
+});
+
+describe('useGalaxyData refetch', () => {
+  it('re-fetches and replaces the systems list when called', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ systems: [rawSystem({ system_id: 1 })] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ systems: [rawSystem({ system_id: 2 })] }) } as Response);
+
+    const { result } = renderHook(() => useGalaxyData('http://backend.example'));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.systems[0].systemId).toBe(1);
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.current.systems[0].systemId).toBe(2);
   });
 });
