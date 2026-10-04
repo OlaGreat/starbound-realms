@@ -113,6 +113,13 @@ jobs:
         run: pnpm install
         working-directory: frontend
 
+      - name: Build sdk
+        # frontend depends on @starbound-realms/sdk as a workspace package;
+        # its dist/ is gitignored, so it must be built before frontend's own
+        # type check or build can resolve it.
+        run: pnpm run build
+        working-directory: sdk
+
       - name: Run frontend tests
         run: pnpm test
         working-directory: frontend
