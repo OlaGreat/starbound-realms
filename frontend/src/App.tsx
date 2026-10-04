@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { GalaxyClient } from '@starbound-realms/sdk';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
 import { truncateAddress } from './lib/format';
+import { getStarboundClient } from './lib/starboundClient';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
 
@@ -266,10 +268,32 @@ const features = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet } = useStellar();
-  const { systems, isLoading: galaxyLoading, error: galaxyError } = useGalaxyData(BACKEND_URL);
+  const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet, signTransaction } =
+    useStellar();
+  const { systems, isLoading: galaxyLoading, error: galaxyError, refetch: refetchGalaxy } =
+    useGalaxyData(BACKEND_URL);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const selectedSystem = systems.find((s) => s.systemId === selectedSystemId) ?? null;
+
+  const claimSystem = useCallback(
+    async (systemId: number) => {
+      if (!walletAddress) {
+        return;
+      }
+      setClaimError(null);
+      try {
+        const client = getStarboundClient();
+        const galaxy = new GalaxyClient(client);
+        await galaxy.claimSystem(walletAddress, systemId, (xdr) => signTransaction(xdr, client.networkPassphrase));
+        await refetchGalaxy();
+        setSelectedSystemId(null);
+      } catch (err) {
+        setClaimError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [walletAddress, signTransaction, refetchGalaxy]
+  );
 
   return (
     <div style={styles.page}>
@@ -364,7 +388,9 @@ export default function App() {
                 system={selectedSystem}
                 walletAddress={walletAddress}
                 onClose={() => setSelectedSystemId(null)}
+                onClaim={claimSystem}
               />
+              {claimError && <p style={styles.walletError}>{claimError}</p>}
             </>
           )}
         </section>
