@@ -1,9 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { GalaxyClient } from '@starbound-realms/sdk';
+import { GalaxyClient, FleetClient, UnitType } from '@starbound-realms/sdk';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
+import { useFleetData } from './hooks/useFleetData';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
+import { Fleet } from './components/Fleet';
 import { truncateAddress } from './lib/format';
 import { getStarboundClient } from './lib/starboundClient';
 
@@ -295,6 +297,29 @@ export default function App() {
     [walletAddress, signTransaction, refetchGalaxy]
   );
 
+  const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
+  const [buildError, setBuildError] = useState<string | null>(null);
+
+  const buildUnit = useCallback(
+    async (unitType: UnitType, count: number) => {
+      if (!walletAddress) {
+        return;
+      }
+      setBuildError(null);
+      try {
+        const client = getStarboundClient();
+        const fleetClient = new FleetClient(client);
+        await fleetClient.buildUnit(walletAddress, unitType, count, (xdr) =>
+          signTransaction(xdr, client.networkPassphrase)
+        );
+        await refetchFleet();
+      } catch (err) {
+        setBuildError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [walletAddress, signTransaction, refetchFleet]
+  );
+
   return (
     <div style={styles.page}>
       {/* Nav */}
@@ -391,6 +416,10 @@ export default function App() {
                 onClaim={claimSystem}
               />
               {claimError && <p style={styles.walletError}>{claimError}</p>}
+
+              <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              {fleetError && <p style={styles.walletError}>{fleetError}</p>}
+              {buildError && <p style={styles.walletError}>{buildError}</p>}
             </>
           )}
         </section>
