@@ -320,6 +320,29 @@ export default function App() {
     [walletAddress, signTransaction, refetchFleet]
   );
 
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  const moveFleet = useCallback(
+    async (targetSystemId: number) => {
+      if (!walletAddress) {
+        return;
+      }
+      setMoveError(null);
+      try {
+        const client = getStarboundClient();
+        const fleetClient = new FleetClient(client);
+        await fleetClient.moveFleet(walletAddress, targetSystemId, (xdr) =>
+          signTransaction(xdr, client.networkPassphrase)
+        );
+        await refetchFleet();
+        setSelectedSystemId(null);
+      } catch (err) {
+        setMoveError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [walletAddress, signTransaction, refetchFleet]
+  );
+
   return (
     <div style={styles.page}>
       {/* Nav */}
@@ -412,10 +435,13 @@ export default function App() {
               <StarSystem
                 system={selectedSystem}
                 walletAddress={walletAddress}
+                fleet={fleet}
                 onClose={() => setSelectedSystemId(null)}
                 onClaim={claimSystem}
+                onMoveFleet={moveFleet}
               />
               {claimError && <p style={styles.walletError}>{claimError}</p>}
+              {moveError && <p style={styles.walletError}>{moveError}</p>}
 
               <Fleet fleet={fleet} onBuildUnit={buildUnit} />
               {fleetError && <p style={styles.walletError}>{fleetError}</p>}
