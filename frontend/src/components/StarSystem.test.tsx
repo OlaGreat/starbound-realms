@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { getOwnershipLabel, StarSystem } from './StarSystem';
 import { GalaxySystem } from '../hooks/useGalaxyData';
+import { Fleet } from '@starbound-realms/sdk';
 
 function makeSystem(overrides: Partial<GalaxySystem> = {}): GalaxySystem {
   return {
@@ -15,6 +16,10 @@ function makeSystem(overrides: Partial<GalaxySystem> = {}): GalaxySystem {
     lastClaimed: 0,
     ...overrides,
   };
+}
+
+function makeFleet(overrides: Partial<Fleet> = {}): Fleet {
+  return { scouts: 1, fighters: 0, cruisers: 0, dreadnoughts: 0, location: 0, lastMoved: 0, ...overrides };
 }
 
 describe('getOwnershipLabel', () => {
@@ -89,5 +94,66 @@ describe('StarSystem', () => {
     render(<StarSystem system={makeSystem({ owner: null })} walletAddress="GME" onClose={() => {}} />);
 
     expect(screen.queryByRole('button', { name: /claim/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a move-fleet button and calls onMoveFleet with the target system id', () => {
+    const onMoveFleet = vi.fn();
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7 })}
+        walletAddress="GME"
+        fleet={makeFleet({ location: 0 })}
+        onClose={() => {}}
+        onMoveFleet={onMoveFleet}
+      />
+    );
+
+    screen.getByRole('button', { name: /move fleet/i }).click();
+
+    expect(onMoveFleet).toHaveBeenCalledWith(7);
+  });
+
+  it('does not show a move-fleet button when no onMoveFleet handler is given', () => {
+    render(
+      <StarSystem system={makeSystem({ systemId: 7 })} walletAddress="GME" fleet={makeFleet()} onClose={() => {}} />
+    );
+
+    expect(screen.queryByRole('button', { name: /move fleet/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show a move-fleet button when the fleet has no units', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7 })}
+        walletAddress="GME"
+        fleet={makeFleet({ scouts: 0 })}
+        onClose={() => {}}
+        onMoveFleet={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /move fleet/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show a move-fleet button when no fleet data is available', () => {
+    render(
+      <StarSystem system={makeSystem({ systemId: 7 })} walletAddress="GME" fleet={null} onClose={() => {}} onMoveFleet={vi.fn()} />
+    );
+
+    expect(screen.queryByRole('button', { name: /move fleet/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show a move-fleet button for the system the fleet is already at', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7 })}
+        walletAddress="GME"
+        fleet={makeFleet({ location: 7 })}
+        onClose={() => {}}
+        onMoveFleet={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /move fleet/i })).not.toBeInTheDocument();
   });
 });

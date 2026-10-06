@@ -1,3 +1,4 @@
+import { Fleet, isFleetEmpty } from '@starbound-realms/sdk';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 import { truncateAddress } from '../lib/format';
 
@@ -45,6 +46,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  moveButton: {
+    marginTop: '0.6rem',
+    width: '100%',
+    background: 'transparent',
+    color: 'var(--accent)',
+    border: '1px solid var(--accent)',
+    borderRadius: '8px',
+    padding: '0.7rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };
 
 /** Returns how a system's ownership should read relative to the connected wallet. */
@@ -61,17 +73,21 @@ export function getOwnershipLabel(system: GalaxySystem, walletAddress: string | 
 export interface StarSystemProps {
   system: GalaxySystem | null;
   walletAddress: string | null;
+  fleet?: Fleet | null;
   onClose: () => void;
   onClaim?: (systemId: number) => void;
+  onMoveFleet?: (systemId: number) => void;
 }
 
 /** Detail drawer for a single star system, opened from GalaxyMap. */
-export function StarSystem({ system, walletAddress, onClose, onClaim }: StarSystemProps) {
+export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet }: StarSystemProps) {
   if (!system) {
     return null;
   }
 
   const canClaim = !system.owner && Boolean(onClaim);
+  const canMoveFleet =
+    Boolean(onMoveFleet) && Boolean(fleet) && !isFleetEmpty(fleet!) && fleet!.location !== system.systemId;
 
   return (
     <div style={styles.drawer}>
@@ -108,6 +124,12 @@ export function StarSystem({ system, walletAddress, onClose, onClaim }: StarSyst
       {canClaim && (
         <button style={styles.claimButton} onClick={() => onClaim!(system.systemId)}>
           Claim System
+        </button>
+      )}
+
+      {canMoveFleet && (
+        <button style={styles.moveButton} onClick={() => onMoveFleet!(system.systemId)}>
+          Move Fleet Here
         </button>
       )}
     </div>
