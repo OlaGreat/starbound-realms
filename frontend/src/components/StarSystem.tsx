@@ -57,6 +57,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  attackButton: {
+    marginTop: '0.6rem',
+    width: '100%',
+    background: 'transparent',
+    color: 'var(--red)',
+    border: '1px solid var(--red)',
+    borderRadius: '8px',
+    padding: '0.7rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };
 
 /** Returns how a system's ownership should read relative to the connected wallet. */
@@ -77,10 +88,11 @@ export interface StarSystemProps {
   onClose: () => void;
   onClaim?: (systemId: number) => void;
   onMoveFleet?: (systemId: number) => void;
+  onAttack?: (systemId: number) => void;
 }
 
 /** Detail drawer for a single star system, opened from GalaxyMap. */
-export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet }: StarSystemProps) {
+export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet, onAttack }: StarSystemProps) {
   if (!system) {
     return null;
   }
@@ -88,6 +100,10 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
   const canClaim = !system.owner && Boolean(onClaim);
   const canMoveFleet =
     Boolean(onMoveFleet) && Boolean(fleet) && !isFleetEmpty(fleet!) && fleet!.location !== system.systemId;
+  // resolve_battle has no location requirement — any non-empty fleet can
+  // attack any system owned by someone else, regardless of where it is.
+  const canAttack =
+    Boolean(onAttack) && Boolean(fleet) && !isFleetEmpty(fleet!) && Boolean(system.owner) && system.owner !== walletAddress;
 
   return (
     <div style={styles.drawer}>
@@ -130,6 +146,12 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
       {canMoveFleet && (
         <button style={styles.moveButton} onClick={() => onMoveFleet!(system.systemId)}>
           Move Fleet Here
+        </button>
+      )}
+
+      {canAttack && (
+        <button style={styles.attackButton} onClick={() => onAttack!(system.systemId)}>
+          Attack
         </button>
       )}
     </div>

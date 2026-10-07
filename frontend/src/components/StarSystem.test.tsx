@@ -143,6 +143,92 @@ describe('StarSystem', () => {
     expect(screen.queryByRole('button', { name: /move fleet/i })).not.toBeInTheDocument();
   });
 
+  it('shows an attack button for a system owned by someone else and calls onAttack with the system id', () => {
+    const onAttack = vi.fn();
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: 'GENEMY' })}
+        walletAddress="GME"
+        fleet={makeFleet()}
+        onClose={() => {}}
+        onAttack={onAttack}
+      />
+    );
+
+    screen.getByRole('button', { name: /attack/i }).click();
+
+    expect(onAttack).toHaveBeenCalledWith(7);
+  });
+
+  it('does not show an attack button for an unclaimed system', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: null })}
+        walletAddress="GME"
+        fleet={makeFleet()}
+        onClose={() => {}}
+        onAttack={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /attack/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show an attack button for a system owned by the connected wallet', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: 'GME' })}
+        walletAddress="GME"
+        fleet={makeFleet()}
+        onClose={() => {}}
+        onAttack={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /attack/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show an attack button when the fleet has no units', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: 'GENEMY' })}
+        walletAddress="GME"
+        fleet={makeFleet({ scouts: 0 })}
+        onClose={() => {}}
+        onAttack={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /attack/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show an attack button when no fleet data is available', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: 'GENEMY' })}
+        walletAddress="GME"
+        fleet={null}
+        onClose={() => {}}
+        onAttack={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /attack/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show an attack button when no onAttack handler is given', () => {
+    render(
+      <StarSystem
+        system={makeSystem({ systemId: 7, owner: 'GENEMY' })}
+        walletAddress="GME"
+        fleet={makeFleet()}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /attack/i })).not.toBeInTheDocument();
+  });
+
   it('does not show a move-fleet button for the system the fleet is already at', () => {
     render(
       <StarSystem
