@@ -66,13 +66,17 @@ Each player has one fleet, tracked by the `fleet` contract. Fleets are composed 
 **Moving fleets:** Players call `fleet.move_fleet` to move to an adjacent system. Movement has a 60-second cooldown between moves.
 
 - If the target system is **unclaimed** — the fleet moves and the player can claim it
-- If the target system is **owned by another player** — a battle is triggered automatically
+- If the target system is **owned by another player** — the fleet moves there; moving doesn't fight
+  automatically, see Battle below
 
 ---
 
 ## Battle
 
-Battle is resolved fully on-chain by the `battle` contract when a fleet moves into an occupied system.
+Battle is a separate, explicit action: a player calls `battle.resolve_battle(attacker, defender, system_id)`
+directly, naming the system's current owner as the defender. It has no location requirement — an attacker's
+fleet can be anywhere and still attack any system owned by someone else. (`fleet.move_fleet` only ever moves
+a fleet; it never calls into the battle contract.)
 
 **Resolution algorithm:**
 

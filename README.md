@@ -100,7 +100,9 @@ Resources are mined passively from owned systems and claimable via a contract ca
 Fleets are composed of units, each with attack and defense stats stored in the `fleet` contract. Players build units by spending resources, then move fleets between adjacent star systems.
 
 ### Battle
-When a fleet moves into an occupied system, a battle is triggered. The `battle` contract:
+Battle is a separate action from moving — a player explicitly attacks a system owned by someone else by
+calling `battle.resolve_battle`, naming that system's current owner as the defender. There's no location
+requirement: an attacker's fleet doesn't need to be at the target system first. The `battle` contract:
 1. Reads attacker and defender fleet stats
 2. Applies combat modifiers (system defense rating, unit types)
 3. Uses `Prng` for verifiable on-chain randomness
