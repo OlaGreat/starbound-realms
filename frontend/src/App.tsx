@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { GalaxyClient, FleetClient, UnitType } from '@starbound-realms/sdk';
+import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-realms/sdk';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
@@ -343,6 +343,41 @@ export default function App() {
     [walletAddress, signTransaction, refetchFleet]
   );
 
+  const [attackError, setAttackError] = useState<string | null>(null);
+  const [battleResult, setBattleResult] = useState<string | null>(null);
+
+  const attackSystem = useCallback(
+    async (systemId: number) => {
+      if (!walletAddress) {
+        return;
+      }
+      const defender = systems.find((s) => s.systemId === systemId)?.owner;
+      if (!defender) {
+        return;
+      }
+      setAttackError(null);
+      setBattleResult(null);
+      try {
+        const client = getStarboundClient();
+        const battleClient = new BattleClient(client);
+        const battleId = await battleClient.resolveBattle(walletAddress, defender, systemId, (xdr) =>
+          signTransaction(xdr, client.networkPassphrase)
+        );
+        const battle = await battleClient.getBattle(battleId);
+        setBattleResult(
+          battle.winner === walletAddress
+            ? `Victory! You took system ${systemId} in ${battle.rounds} round(s).`
+            : `Defeat. Your fleet was repelled from system ${systemId} after ${battle.rounds} round(s).`
+        );
+        await Promise.all([refetchFleet(), refetchGalaxy()]);
+        setSelectedSystemId(null);
+      } catch (err) {
+        setAttackError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [walletAddress, systems, signTransaction, refetchFleet, refetchGalaxy]
+  );
+
   return (
     <div style={styles.page}>
       {/* Nav */}
@@ -439,9 +474,12 @@ export default function App() {
                 onClose={() => setSelectedSystemId(null)}
                 onClaim={claimSystem}
                 onMoveFleet={moveFleet}
+                onAttack={attackSystem}
               />
               {claimError && <p style={styles.walletError}>{claimError}</p>}
               {moveError && <p style={styles.walletError}>{moveError}</p>}
+              {attackError && <p style={styles.walletError}>{attackError}</p>}
+              {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
               <Fleet fleet={fleet} onBuildUnit={buildUnit} />
               {fleetError && <p style={styles.walletError}>{fleetError}</p>}
