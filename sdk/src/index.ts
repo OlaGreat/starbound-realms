@@ -4,7 +4,7 @@ export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOp
 export { GalaxyClient } from './galaxy';
 export type { StarSystem } from './galaxy';
 
-export { ResourcesClient } from './resources';
+export { ResourcesClient, RESOURCE_ASSET_CODES, buildTrustlineKey } from './resources';
 export type { ResourceType, ResourceBalance } from './resources';
 
 export { FleetClient, getUnitCost, calculateFleetAttack, calculateFleetDefense, isFleetEmpty } from './fleet';
