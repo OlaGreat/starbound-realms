@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Keypair, StrKey } from '@stellar/stellar-sdk';
-import { GalaxyClient } from './galaxy';
-import { StarboundClient } from './client';
+import { GalaxyClient } from './galaxy.js';
+import { StarboundClient } from './client.js';
 
 const PLAYER = Keypair.random().publicKey();
 const GALAXY_MAP = StrKey.encodeContract(Buffer.alloc(32, 6));

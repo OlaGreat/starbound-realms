@@ -63,6 +63,12 @@ jobs:
         run: pnpm exec tsc --noEmit
         working-directory: sdk
 
+      - name: Build SDK and import it from plain Node
+        # Vite and Vitest resolve extensionless ESM imports; plain Node does
+        # not. This catches a built SDK that only works through a bundler.
+        run: pnpm run build && node -e "import('./dist/index.js')"
+        working-directory: sdk
+
   # ── Backend ──────────────────────────────────────────────────────────────────
   backend:
     name: Backend (Node.js)

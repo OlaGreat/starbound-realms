@@ -1,5 +1,5 @@
 import { Asset, Keypair, nativeToScVal, Operation, xdr } from '@stellar/stellar-sdk';
-import { StarboundClient, TransactionSigner } from './client';
+import { StarboundClient, TransactionSigner } from './client.js';
 
 export type ResourceType = 'Iron' | 'Energy' | 'Plasma';
 

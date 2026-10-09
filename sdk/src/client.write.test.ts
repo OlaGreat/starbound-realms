@@ -11,7 +11,7 @@ import {
   TransactionBuilder,
   rpc,
 } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client';
+import { StarboundClient } from './client.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 5));
 const SOURCE = Keypair.random().publicKey();

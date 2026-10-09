@@ -1,14 +1,14 @@
-export { StarboundClient } from './client';
-export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions } from './client';
+export { StarboundClient } from './client.js';
+export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions } from './client.js';
 
-export { GalaxyClient } from './galaxy';
-export type { StarSystem } from './galaxy';
+export { GalaxyClient } from './galaxy.js';
+export type { StarSystem } from './galaxy.js';
 
-export { ResourcesClient, RESOURCE_ASSET_CODES, buildTrustlineKey } from './resources';
-export type { ResourceType, ResourceBalance } from './resources';
+export { ResourcesClient, RESOURCE_ASSET_CODES, buildTrustlineKey } from './resources.js';
+export type { ResourceType, ResourceBalance } from './resources.js';
 
-export { FleetClient, getUnitCost, calculateFleetAttack, calculateFleetDefense, isFleetEmpty } from './fleet';
-export type { Fleet, UnitType, UnitCost } from './fleet';
+export { FleetClient, getUnitCost, calculateFleetAttack, calculateFleetDefense, isFleetEmpty } from './fleet.js';
+export type { Fleet, UnitType, UnitCost } from './fleet.js';
 
-export { BattleClient, didAttackerWin, getBattleLoser, wasBattleDecisive } from './battle';
-export type { BattleResult, BattleRecord } from './battle';
+export { BattleClient, didAttackerWin, getBattleLoser, wasBattleDecisive } from './battle.js';
+export type { BattleResult, BattleRecord } from './battle.js';

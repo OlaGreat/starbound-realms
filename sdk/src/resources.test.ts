@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Keypair, Operation, scValToNative, xdr } from '@stellar/stellar-sdk';
-import { ResourcesClient, resourceTypeToScVal, buildTrustlineKey, RESOURCE_ASSET_CODES } from './resources';
+import { ResourcesClient, resourceTypeToScVal, buildTrustlineKey, RESOURCE_ASSET_CODES } from './resources.js';
 
 const PLAYER = Keypair.random().publicKey();
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Keypair, nativeToScVal, scValToNative, StrKey } from '@stellar/stellar-sdk';
-import { didAttackerWin, getBattleLoser, wasBattleDecisive, BattleClient, BattleResult } from './battle';
+import { didAttackerWin, getBattleLoser, wasBattleDecisive, BattleClient, BattleResult } from './battle.js';
 
 const ATTACKER = 'GATTACKER111111111111111111111111111111111111111111111111';
 const DEFENDER = 'GDEFENDER111111111111111111111111111111111111111111111111';

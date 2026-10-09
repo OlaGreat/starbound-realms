@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nativeToScVal, rpc, xdr, StrKey } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client';
+import { StarboundClient } from './client.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 3));
 

@@ -8,7 +8,7 @@ import {
   Fleet,
   FleetClient,
   unitTypeToScVal,
-} from './fleet';
+} from './fleet.js';
 
 // ── getUnitCost ───────────────────────────────────────────────────────────────
 

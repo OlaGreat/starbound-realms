@@ -1,5 +1,5 @@
 import { Contract, nativeToScVal } from '@stellar/stellar-sdk';
-import { StarboundClient, TransactionSigner } from './client';
+import { StarboundClient, TransactionSigner } from './client.js';
 
 export interface StarSystem {
   systemId: number;

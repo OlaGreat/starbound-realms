@@ -1,5 +1,5 @@
 import { Contract, nativeToScVal, scValToNative } from '@stellar/stellar-sdk';
-import { StarboundClient, TransactionSigner } from './client';
+import { StarboundClient, TransactionSigner } from './client.js';
 
 export interface BattleResult {
   battleId: number;
