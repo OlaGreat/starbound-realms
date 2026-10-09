@@ -20,6 +20,12 @@ export interface WriteCallOptions {
   sign: TransactionSigner;
 }
 
+export interface ClassicCallOptions {
+  sourceAddress: string;
+  operations: xdr.Operation[];
+  sign: TransactionSigner;
+}
+
 export interface ContractIds {
   galaxyMap: string;
   resources: string;
@@ -71,10 +77,29 @@ export class StarboundClient {
    */
   async submitTransaction(options: WriteCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
     const account = await this.server.getAccount(options.sourceAddress);
-    const unprepared = buildUnpreparedTransaction(this.networkPassphrase, account, options.operation);
+    const unprepared = buildUnpreparedTransaction(this.networkPassphrase, account, [options.operation]);
     const prepared = await this.server.prepareTransaction(unprepared);
+    return this.signAndConfirm(prepared, options.sign);
+  }
 
-    const signedXdr = await options.sign(prepared.toXDR());
+  /**
+   * Signs, submits, and confirms a transaction of classic (non-Soroban)
+   * operations, such as trustlines. Skips simulation entirely: RPC's
+   * prepareTransaction rejects classic operations outright
+   * ("unsupported operation type"), verified against testnet.
+   */
+  async submitClassicTransaction(options: ClassicCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
+    const account = await this.server.getAccount(options.sourceAddress);
+    const tx = buildUnpreparedTransaction(this.networkPassphrase, account, options.operations);
+    return this.signAndConfirm(tx, options.sign);
+  }
+
+  /** Hands a built transaction to the signer, submits it, and waits for its final status. */
+  private async signAndConfirm(
+    tx: Transaction,
+    sign: TransactionSigner
+  ): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
+    const signedXdr = await sign(tx.toXDR());
     const signedTx = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase) as Transaction;
 
     const sendResult = await this.server.sendTransaction(signedTx);
@@ -85,16 +110,13 @@ export class StarboundClient {
   }
 }
 
-/** Builds an unprepared (unsimulated) transaction for a single contract call. */
-function buildUnpreparedTransaction(
-  networkPassphrase: string,
-  account: Account,
-  operation: xdr.Operation
-): ReturnType<TransactionBuilder['build']> {
-  return new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase })
-    .addOperation(operation)
-    .setTimeout(30)
-    .build();
+/** Builds an unprepared (unsimulated) transaction holding the given operations. */
+function buildUnpreparedTransaction(networkPassphrase: string, account: Account, operations: xdr.Operation[]): Transaction {
+  const builder = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase });
+  for (const operation of operations) {
+    builder.addOperation(operation);
+  }
+  return builder.setTimeout(30).build();
 }
 
 /** Throws if the network didn't accept the transaction for processing. */

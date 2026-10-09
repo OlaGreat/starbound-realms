@@ -1,5 +1,5 @@
 export { StarboundClient } from './client';
-export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions } from './client';
+export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions } from './client';
 
 export { GalaxyClient } from './galaxy';
 export type { StarSystem } from './galaxy';

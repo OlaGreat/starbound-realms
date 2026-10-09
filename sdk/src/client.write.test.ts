@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   Account,
+  Asset,
   BASE_FEE,
+  Operation,
   Contract,
   Keypair,
   Networks,
@@ -114,6 +116,53 @@ describe('submitTransaction', () => {
 
     await expect(
       client.submitTransaction({ sourceAddress: SOURCE, operation: new Contract(CONTRACT_ID).call('claim_system'), sign })
+    ).rejects.toThrow(/failed/i);
+  });
+});
+
+describe('submitClassicTransaction', () => {
+  const ISSUER = Keypair.random().publicKey();
+  const trustOps = () => ['IRON', 'NRGY'].map((code) => Operation.changeTrust({ asset: new Asset(code, ISSUER) }));
+
+  it('never calls prepareTransaction, since RPC simulation rejects classic operations', async () => {
+    const server = baseServer();
+    const client = makeClient(server);
+
+    await client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() });
+
+    expect(server.prepareTransaction).not.toHaveBeenCalled();
+  });
+
+  it('puts every given operation into one signed transaction', async () => {
+    const server = baseServer();
+    const client = makeClient(server);
+
+    await client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() });
+
+    const sentTx = (server.sendTransaction as any).mock.calls[0][0];
+    expect(sentTx.operations.map((op: any) => op.type)).toEqual(['changeTrust', 'changeTrust']);
+    expect(sentTx.signatures.length).toBeGreaterThan(0);
+  });
+
+  it('throws when the network rejects the transaction', async () => {
+    const server = baseServer({
+      sendTransaction: vi.fn().mockResolvedValue({ status: 'ERROR', hash: 'HASH1', latestLedger: 1 }),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
+    ).rejects.toThrow(/rejected/i);
+  });
+
+  it('throws when the transaction fails on-chain', async () => {
+    const server = baseServer({
+      pollTransaction: vi.fn().mockResolvedValue({ status: rpc.Api.GetTransactionStatus.FAILED, txHash: 'HASH1' }),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
     ).rejects.toThrow(/failed/i);
   });
 });
