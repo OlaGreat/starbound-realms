@@ -89,7 +89,8 @@ describe('processEvent — battle_resolved', () => {
       contractId: 'C1',
       topic: ['battle_resolved'],
       value: {
-        battle_id: 5,
+        // u64: scValToNative yields a BigInt, verified against a real testnet event
+        battle_id: 5n,
         attacker: 'GATTACKER',
         defender: 'GDEFENDER',
         system_id: 9,
@@ -101,7 +102,7 @@ describe('processEvent — battle_resolved', () => {
 
     await processEvent(db, event);
 
-    expect(saveBattle).toHaveBeenCalledWith(db, 5, 'GATTACKER', 'GDEFENDER', 9, 'GATTACKER', 3, 300);
+    expect(saveBattle).toHaveBeenCalledWith(db, 5n, 'GATTACKER', 'GDEFENDER', 9, 'GATTACKER', 3, 300);
   });
 });
 
