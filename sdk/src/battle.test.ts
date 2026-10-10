@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { decodeInvokeArgs } from './xdr.testutil.js';
 import { Keypair, nativeToScVal, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import { didAttackerWin, getBattleLoser, wasBattleDecisive, BattleClient, BattleResult } from './battle.js';
 
@@ -111,9 +112,9 @@ describe('BattleClient.resolveBattle', () => {
     expect(options.sourceAddress).toBe(ATTACKER_ADDR);
     expect(options.sign).toBe(sign);
 
-    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
-    expect(scValToNative(args[0])).toBe(ATTACKER_ADDR);
-    expect(scValToNative(args[1])).toBe(DEFENDER_ADDR);
-    expect(scValToNative(args[2])).toBe(3);
+    const args = decodeInvokeArgs(options.operation);
+    expect(args[0]).toBe(ATTACKER_ADDR);
+    expect(args[1]).toBe(DEFENDER_ADDR);
+    expect(args[2]).toBe(3);
   });
 });

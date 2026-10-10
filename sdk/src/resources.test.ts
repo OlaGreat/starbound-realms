@@ -12,7 +12,7 @@ describe('resourceTypeToScVal', () => {
   it('encodes a resource as a one-symbol vec, the way Soroban encodes a unit enum variant', () => {
     const scVal = resourceTypeToScVal('Energy');
 
-    expect(scVal.switch()).toBe(xdr.ScValType.scvVec());
+    expect(scVal.type).toBe('scvVec');
     expect(scValToNative(scVal)).toEqual(['Energy']);
   });
 });
@@ -78,11 +78,11 @@ describe('buildTrustlineKey', () => {
   it('builds a trustline ledger key for the player and the given asset', () => {
     const key = buildTrustlineKey(PLAYER, 'IRON', ISSUER);
 
-    expect(key.switch()).toBe(xdr.LedgerEntryType.trustline());
-    expect(Keypair.fromPublicKey(PLAYER).xdrAccountId().toXDR('base64')).toBe(
-      key.trustLine().accountId().toXDR('base64')
-    );
-    expect(key.trustLine().asset().alphaNum4().assetCode().toString()).toBe('IRON');
+    const trustLine = (key as any).trustLine;
+    expect(key.type).toBe('trustline');
+    expect(trustLine.accountId.toJSON()).toBe(PLAYER);
+    expect(String(trustLine.asset.alphaNum4.assetCode)).toBe('IRON');
+    expect(trustLine.asset.alphaNum4.issuer.toJSON()).toBe(ISSUER);
   });
 });
 

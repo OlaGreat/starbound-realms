@@ -10,13 +10,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^13.0.0"
+    "@stellar/stellar-sdk": "^17.2.1"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
     "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
     "vitest": "^1.2.0"
   },
   "type": "module"
 }
-

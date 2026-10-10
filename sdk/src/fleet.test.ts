@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { decodeInvokeArgs } from './xdr.testutil.js';
 import { Keypair, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import {
   getUnitCost,
@@ -180,10 +181,10 @@ describe('FleetClient.buildUnit', () => {
     expect(options.sourceAddress).toBe(PLAYER);
     expect(options.sign).toBe(sign);
 
-    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
-    expect(scValToNative(args[0])).toBe(PLAYER);
-    expect(scValToNative(args[1])).toEqual(['Fighter']);
-    expect(scValToNative(args[2])).toBe(3);
+    const args = decodeInvokeArgs(options.operation);
+    expect(args[0]).toBe(PLAYER);
+    expect(args[1]).toEqual(['Fighter']);
+    expect(args[2]).toBe(3);
   });
 });
 
@@ -202,8 +203,8 @@ describe('FleetClient.moveFleet', () => {
     expect(options.sourceAddress).toBe(PLAYER);
     expect(options.sign).toBe(sign);
 
-    const args = options.operation.body().invokeHostFunctionOp().hostFunction().invokeContract().args();
-    expect(scValToNative(args[0])).toBe(PLAYER);
-    expect(scValToNative(args[1])).toBe(4);
+    const args = decodeInvokeArgs(options.operation);
+    expect(args[0]).toBe(PLAYER);
+    expect(args[1]).toBe(4);
   });
 });
