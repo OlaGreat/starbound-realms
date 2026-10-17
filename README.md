@@ -252,6 +252,8 @@ Read the full [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 - [x] TypeScript SDK — `StarboundClient` RPC setup
 - [ ] SDK — galaxy, fleet, battle, resources modules
 - [ ] Backend indexer — Soroban event listener
+
+> 📖 **SDK Documentation** — See [`sdk/README.md`](sdk/README.md) for installation, usage (`StarboundClient.testnet(...)`, `GalaxyClient`, `FleetClient`), the read vs. write call pattern, and the `TransactionSigner` abstraction.
 - [ ] Backend REST API — full implementation (galaxy, player, fleet, battle)
 - [ ] Frontend — galaxy map renderer
 - [ ] Frontend — fleet builder UI
