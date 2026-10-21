@@ -6,6 +6,8 @@ export { NetworkError, SimulationError, TransactionRejectedError, TransactionFai
 export { GalaxyClient } from './galaxy.js';
 export type { StarSystem } from './galaxy.js';
 
+export { AllianceClient } from './alliance.js';
+
 export { ResourcesClient, RESOURCE_ASSET_CODES, buildTrustlineKey } from './resources.js';
 export type { ResourceType, ResourceBalance } from './resources.js';
 
