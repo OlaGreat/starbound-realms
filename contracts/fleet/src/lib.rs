@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contract, contractclient, contractimpl, contracttype, symbol_short, Address, Env};
 
-// ── Storage Keys ─────────────────────────────────────────────────────────────
+// ── Storage Keys ──────────────────────────────────────────────────────────[...]
 
 #[contracttype]
 #[derive(Clone)]
@@ -16,7 +16,7 @@ pub enum DataKey {
     Initialized,
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────[...]
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -86,14 +86,34 @@ pub struct UnitCost {
     pub energy: i128,
 }
 
-// ── Contract ──────────────────────────────────────────────────────────────────
+// ── Contract ───────────────────────────────────────────────────────────[...]
 
 #[contract]
 pub struct FleetContract;
 
 #[contractimpl]
 impl FleetContract {
-    /// Initialize with the resources and galaxy-map contract addresses. Must be called once.
+    /// Initializes the fleet contract and stores the addresses of the
+    /// resources and galaxy-map contracts.
+    ///
+    /// This method must be invoked once during deployment or setup. It records
+    /// the admin account and marks the contract as initialized so future setup
+    /// attempts panic.
+    ///
+    /// # Arguments
+    /// * `admin` - The address that will be allowed to manage admin-only
+    ///   operations such as registering the battle contract and resetting fleets.
+    /// * `resources_contract` - The Soroban contract address for the resources
+    ///   contract used to burn build costs.
+    /// * `galaxy_map_contract` - The Soroban contract address for the galaxy-map
+    ///   contract used to read grid and system ownership data.
+    ///
+    /// # Panics
+    /// * Panics if the caller does not have authorization for `admin`.
+    /// * Panics if the contract has already been initialized.
+    ///
+    /// # Authorization
+    /// * `admin.require_auth()` must succeed before the contract can initialize.
     pub fn initialize(
         env: Env,
         admin: Address,
@@ -122,7 +142,25 @@ impl FleetContract {
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
 
-    /// Build `count` units of `unit_type`, paying their cost in resources.
+    /// Builds a new batch of units for the specified player.
+    ///
+    /// The player pays the total iron and energy cost for the requested unit
+    /// count and stores the new units in that player's fleet.
+    ///
+    /// # Arguments
+    /// * `player` - The account that owns the fleet being expanded.
+    /// * `unit_type` - Which unit type to build.
+    /// * `count` - Number of units to create; must be greater than zero.
+    ///
+    /// # Panics
+    /// * Panics if `count == 0`.
+    /// * Panics if the player does not authorize the call.
+    /// * Panics if the contract has not been initialized or if the resources
+    ///   contract rejects the burn for insufficient resources.
+    ///
+    /// # Authorization
+    /// * `player.require_auth()` must succeed for the player who is spending the
+    ///   resources and receiving the new fleet units.
     pub fn build_unit(env: Env, player: Address, unit_type: UnitType, count: u32) {
         player.require_auth();
         verify_count_is_positive(count);
@@ -137,8 +175,24 @@ impl FleetContract {
             .publish((symbol_short!("built"), player), (unit_type, count));
     }
 
-    /// Give a fleet its first location, at a system the player owns. Works
-    /// once per player; after that the fleet moves with `move_fleet`.
+    /// Deploys a fleet to a system owned by the player.
+    ///
+    /// A fleet may only be deployed once per player. Once deployed, the fleet
+    /// gains a starting location and a timestamp used for cooldown enforcement.
+    ///
+    /// # Arguments
+    /// * `player` - The fleet owner.
+    /// * `system_id` - The galaxy system ID to assign as the fleet's initial
+    ///   location.
+    ///
+    /// # Panics
+    /// * Panics if the player does not authorize the transaction.
+    /// * Panics if the player has already deployed a fleet.
+    /// * Panics if the selected system does not exist or is not owned by the
+    ///   caller.
+    ///
+    /// # Authorization
+    /// * `player.require_auth()` must succeed.
     pub fn deploy_fleet(env: Env, player: Address, system_id: u32) {
         player.require_auth();
         verify_fleet_is_not_deployed(&env, &player);
@@ -156,7 +210,27 @@ impl FleetContract {
             .publish((symbol_short!("deployed"), player), system_id);
     }
 
-    /// Move your fleet to an adjacent system, at most once per cooldown period.
+    /// Moves a deployed fleet to an adjacent system if it is eligible.
+    ///
+    /// Movement is limited to adjacent systems on the galaxy grid and cannot
+    /// happen until the cooldown period has elapsed since the last move. The
+    /// caller must own a non-empty deployed fleet.
+    ///
+    /// # Arguments
+    /// * `player` - The fleet owner performing the move.
+    /// * `target_system_id` - The destination system ID, which must be adjacent
+    ///   to the fleet's current position and inside the galaxy grid.
+    ///
+    /// # Panics
+    /// * Panics if the player does not authorize the transaction.
+    /// * Panics if the fleet is empty.
+    /// * Panics if the fleet has not yet been deployed.
+    /// * Panics if the target system is outside the galaxy grid.
+    /// * Panics if the target system is not adjacent to the current location.
+    /// * Panics if the cooldown period has not elapsed.
+    ///
+    /// # Authorization
+    /// * `player.require_auth()` must succeed.
     pub fn move_fleet(env: Env, player: Address, target_system_id: u32) {
         player.require_auth();
 
@@ -178,7 +252,23 @@ impl FleetContract {
             .publish((symbol_short!("moved"), player), (from, target_system_id));
     }
 
-    /// Registers the battle contract allowed to call `apply_battle_losses`. Admin only.
+    /// Registers the battle contract that is allowed to apply fleet losses.
+    ///
+    /// Only the admin may authorize a new battle contract. This prevents
+    /// arbitrary callers from mutating player fleets during combat resolution.
+    ///
+    /// # Arguments
+    /// * `caller` - The admin account performing the registry update.
+    /// * `battle_contract` - The contract address that is authorized to call
+    ///   `apply_battle_losses`.
+    ///
+    /// # Panics
+    /// * Panics if the caller is not the currently registered admin.
+    /// * Panics if the `caller` address does not authorize the call.
+    ///
+    /// # Authorization
+    /// * `caller.require_auth()` must succeed.
+    /// * The caller must equal the contract admin.
     pub fn set_battle_contract(env: Env, caller: Address, battle_contract: Address) {
         caller.require_auth();
         verify_caller_is_admin(&env, &caller);
@@ -188,8 +278,25 @@ impl FleetContract {
             .set(&DataKey::BattleContract, &battle_contract);
     }
 
-    /// Reduces a player's fleet by the given per-unit losses, clamped at zero.
-    /// Callable only by the registered battle contract.
+    /// Applies combat losses to a player's fleet by subtracting each unit count.
+    ///
+    /// This method is intended for the registered battle contract only. Losses
+    /// are clamped at zero so a fleet can never go below zero units.
+    ///
+    /// # Arguments
+    /// * `caller` - The address of the registered battle contract.
+    /// * `player` - The target fleet owner.
+    /// * `losses` - A `Fleet`-shaped payload describing how many of each unit to
+    ///   remove.
+    ///
+    /// # Panics
+    /// * Panics if `caller` is not the authorized battle contract.
+    /// * Panics if `caller` does not authorize the call.
+    /// * Panics if the battle contract has not been registered.
+    ///
+    /// # Authorization
+    /// * `caller.require_auth()` must succeed.
+    /// * `caller` must match the address set via `set_battle_contract`.
     pub fn apply_battle_losses(env: Env, caller: Address, player: Address, losses: Fleet) {
         caller.require_auth();
         verify_caller_is_battle_contract(&env, &caller);
@@ -205,27 +312,64 @@ impl FleetContract {
             .publish((symbol_short!("losses"), player), losses);
     }
 
-    // ── View functions ────────────────────────────────────────────────────────
+    // ── View functions ────────────────────────────────────────────────────────[...]
 
-    /// Returns a player's total attack power (0 for a player with no fleet).
+    /// Returns the total attack power for the given player's fleet.
+    ///
+    /// If the player has never built any units, the function returns zero.
+    ///
+    /// # Arguments
+    /// * `player` - The fleet owner to inspect.
+    ///
+    /// # Returns
+    /// * The sum of each unit's attack value weighted by the fleet composition.
     pub fn get_fleet_attack(env: Env, player: Address) -> u32 {
         calculate_fleet_attack(&get_stored_fleet(&env, &player))
     }
 
-    /// Returns a player's total defense power (0 for a player with no fleet).
+    /// Returns the total defense power for the given player's fleet.
+    ///
+    /// If the player has no fleet stored yet, the result is zero.
+    ///
+    /// # Arguments
+    /// * `player` - The fleet owner to inspect.
+    ///
+    /// # Returns
+    /// * The sum of each unit's defense value weighted by the fleet composition.
     pub fn get_fleet_defense(env: Env, player: Address) -> u32 {
         calculate_fleet_defense(&get_stored_fleet(&env, &player))
     }
 
-    /// Returns a player's fleet, or an empty fleet if they have none.
+    /// Returns the stored `Fleet` for the given player.
+    ///
+    /// If the player has no fleet recorded yet, the contract returns an empty
+    /// fleet with zero units and default location metadata.
+    ///
+    /// # Arguments
+    /// * `player` - The fleet owner to inspect.
+    ///
+    /// # Returns
+    /// * The player's fleet state, or an empty fleet when none exists.
     pub fn get_fleet(env: Env, player: Address) -> Fleet {
         get_stored_fleet(&env, &player)
     }
 
-    /// Clears one player's fleet and deployment state for a new season.
-    /// Admin only. There is no registry of players with fleets to loop over
-    /// (unlike galaxy-map's fixed grid), so this resets one player per call;
-    /// a season reset must call it once per player who has ever deployed.
+    /// Clears a player's fleet and deployment marker before a new season starts.
+    ///
+    /// This is an admin-only maintenance action used to wipe a player's combat
+    /// state without affecting the rest of the game world.
+    ///
+    /// # Arguments
+    /// * `caller` - The address making the reset request.
+    /// * `player` - The fleet owner whose state should be reset.
+    ///
+    /// # Panics
+    /// * Panics if `caller` does not authorize the call.
+    /// * Panics if `caller` is not the registered admin.
+    ///
+    /// # Authorization
+    /// * `caller.require_auth()` must succeed.
+    /// * `caller` must be the contract admin.
     pub fn reset_player_fleet(env: Env, caller: Address, player: Address) {
         caller.require_auth();
         verify_caller_is_admin(&env, &caller);
@@ -237,7 +381,7 @@ impl FleetContract {
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────[...]
 
 /// Returns the fleet's total attack power (sum of each unit's attack stat).
 pub fn calculate_fleet_attack(fleet: &Fleet) -> u32 {
@@ -695,7 +839,7 @@ mod tests {
         assert_eq!(payload, (UnitType::Cruiser, 2));
     }
 
-    // ── adjacency ─────────────────────────────────────────────────────────────
+    // ── adjacency ─────────────────────────────────────────────────────────[...]
 
     #[test]
     fn systems_next_to_each_other_in_a_row_are_adjacent() {
@@ -731,7 +875,7 @@ mod tests {
         assert!(!is_fleet_empty(&Fleet { dreadnoughts: 1, ..empty_fleet() }));
     }
 
-    // ── deploy_fleet ──────────────────────────────────────────────────────────
+    // ── deploy_fleet ────────────────────────────────────────────────────────[...]
 
     #[test]
     fn deploy_fleet_sets_the_initial_location() {
@@ -831,7 +975,7 @@ mod tests {
         fx.client.deploy_fleet(&player, &2);
     }
 
-    // ── move_fleet ────────────────────────────────────────────────────────────
+    // ── move_fleet ────────────────────────────────────────────────────────[...]
 
     fn fleet_with_one_scout(env: &Env, fx: &Fixture<'_>) -> Address {
         let player = Address::generate(env);
@@ -978,7 +1122,7 @@ mod tests {
         assert_eq!(fx.client.get_fleet(&player).scouts, 1);
     }
 
-    // ── fleet power ───────────────────────────────────────────────────────────
+    // ── fleet power ────────────────────────────────────────────────────────[...]
 
     #[test]
     fn get_fleet_attack_returns_calculated_attack_for_the_players_stored_fleet() {
