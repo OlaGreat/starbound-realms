@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contract, contractclient, contractimpl, contracttype, Address, Env, Symbol};
 
-// ── Storage Keys ─────────────────────────────────────────────────────────────
+// ── Storage Keys ──────────────────────────────────────────────────────────[...]
 
 #[contracttype]
 #[derive(Clone)]
@@ -15,7 +15,7 @@ pub enum DataKey {
     Initialized,
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────[...]
 
 /// Mirrors fleet::Fleet field-for-field so it encodes identically over the wire.
 #[contracttype]
@@ -77,14 +77,31 @@ pub trait FleetInterface {
     fn apply_battle_losses(env: Env, caller: Address, player: Address, losses: Fleet);
 }
 
-// ── Contract ──────────────────────────────────────────────────────────────────
+// ── Contract ───────────────────────────────────────────────────────────[...]
 
 #[contract]
 pub struct BattleContract;
 
 #[contractimpl]
 impl BattleContract {
-    /// Initialize with the galaxy-map and fleet contract addresses. Must be called once.
+    /// Initializes the battle contract with the galaxy-map and fleet contracts.
+    ///
+    /// This method must be called once during setup. It stores the contract
+    /// addresses used for ownership validation, fleet queries, and loss
+    /// application, and it initializes the battle ID counter.
+    ///
+    /// # Arguments
+    /// * `admin` - The account authorized to manage this battle contract.
+    /// * `galaxy_map_contract` - The address of the galaxy-map contract.
+    /// * `fleet_contract` - The address of the fleet contract that stores player
+    ///   fleet composition and applies battle losses.
+    ///
+    /// # Panics
+    /// * Panics if `admin` does not authorize the call.
+    /// * Panics if the contract has already been initialized.
+    ///
+    /// # Authorization
+    /// * `admin.require_auth()` must succeed.
     pub fn initialize(env: Env, admin: Address, galaxy_map_contract: Address, fleet_contract: Address) {
         admin.require_auth();
 
@@ -109,8 +126,32 @@ impl BattleContract {
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
 
-    /// Resolves combat between an attacker's fleet and the current owner of
-    /// `system_id`, using Soroban `Prng` for each round's rolls.
+    /// Resolves a battle between an attacker and the current owner of a system.
+    ///
+    /// This method intentionally does not require the fleet to be in the target
+    /// system or adjacent to it; the game treats battle resolution as a
+    /// system-ownership conflict check, not a movement/position validation.
+    /// In other words, `resolve_battle` is not a location validation function.
+    /// It resolves combat by comparing the attacker's fleet against the
+    /// defender's fleet, applying any losses, and transferring system ownership
+    /// if the attacker wins.
+    ///
+    /// # Arguments
+    /// * `attacker` - The player initiating combat.
+    /// * `defender` - The current owner of the system being contested.
+    /// * `system_id` - The system being attacked.
+    ///
+    /// # Returns
+    /// * The newly assigned battle ID for this resolved encounter.
+    ///
+    /// # Panics
+    /// * Panics if the attacker does not authorize the transaction.
+    /// * Panics if the defender does not currently own the target system.
+    /// * Panics if the attacker fleet is empty.
+    /// * Panics if the contract is not fully initialized.
+    ///
+    /// # Authorization
+    /// * `attacker.require_auth()` must succeed.
     pub fn resolve_battle(env: Env, attacker: Address, defender: Address, system_id: u32) -> u64 {
         attacker.require_auth();
 
@@ -157,9 +198,18 @@ impl BattleContract {
         battle_id
     }
 
-    // ── View functions ────────────────────────────────────────────────────────
+    // ── View functions ────────────────────────────────────────────────────────[...]
 
-    /// Returns a stored battle result by id, or panics if it doesn't exist.
+    /// Returns the stored battle result for a given battle ID.
+    ///
+    /// # Arguments
+    /// * `battle_id` - The unique ID of the battle to fetch.
+    ///
+    /// # Returns
+    /// * The persisted `BattleResult` associated with that battle ID.
+    ///
+    /// # Panics
+    /// * Panics if no battle has been recorded for that ID.
     pub fn get_battle(env: Env, battle_id: u64) -> BattleResult {
         env.storage()
             .persistent()
@@ -168,7 +218,7 @@ impl BattleContract {
     }
 }
 
-// ── Battle setup ──────────────────────────────────────────────────────────────
+// ── Battle setup ──────────────────────────────────────────────────────────[...]
 
 fn fetch_galaxy_map_client(env: &Env) -> GalaxyMapClient<'_> {
     let addr: Address = env
@@ -236,7 +286,7 @@ fn apply_losses_if_any(env: &Env, fleet_contract: &FleetClient, player: &Address
     }
 }
 
-// ── Combat math ───────────────────────────────────────────────────────────────
+// ── Combat math ───────────────────────────────────────────────────────────[...]
 
 /// A unit's defense stat doubles as its "toughness" when absorbing damage.
 const UNIT_TOUGHNESS: [(u32, u32); 4] = [(0, 1), (1, 3), (2, 8), (3, 20)];
@@ -369,7 +419,7 @@ mod tests {
         (client, admin)
     }
 
-    // ── mock dependencies ────────────────────────────────────────────────────────
+    // ── mock dependencies ──────────────────────────────────────────────────────[...]
 
     /// Stand-in for galaxy-map: one configurable system, records transfers.
     #[contract]
@@ -513,7 +563,7 @@ mod tests {
         assert_eq!(fleet.scouts, 4);
     }
 
-    // ── round outcome ─────────────────────────────────────────────────────────
+    // ── round outcome ────────────────────────────────────────────────────────[...]
 
     #[test]
     fn higher_roll_wins_the_round() {
@@ -553,7 +603,7 @@ mod tests {
         assert_eq!(calculate_fleet_attack(&attacker, &defender), 33);
     }
 
-    // ── resolve_battle ────────────────────────────────────────────────────────
+    // ── resolve_battle ────────────────────────────────────────────────────────[...]
 
     #[test]
     fn attacker_who_vastly_outguns_the_defender_wins_and_takes_the_system() {
