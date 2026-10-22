@@ -114,6 +114,52 @@ All contributions must follow our engineering guidelines:
 
 Read the full guide: [`docs/engineering-guidelines.md`](docs/engineering-guidelines.md)
 
+---
+
+## Mutation Testing
+
+Writing a test that passes is not enough — you must confirm your test actually *catches* a bug.
+
+After your test goes green, deliberately break the implementation to verify the test turns red. This is called mutation testing, and it is required for every PR that adds new logic.
+
+### How to do it
+
+1. Write your test and make it pass (TDD green).
+2. Introduce a small mutation in the implementation — change a `<` to `<=`, flip a boolean, remove a condition, or alter a return value.
+3. Run the tests and confirm your test **fails** on the mutant.
+4. Revert the mutation and submit.
+
+### Example (TypeScript)
+
+```ts
+// Implementation
+function isFleetEmpty(fleet: Fleet): boolean {
+  return fleet.units.length === 0; // original
+  // return fleet.units.length <= 0; // ← mutant: change === to <=
+}
+
+// Test
+it('returns false when fleet has units', () => {
+  expect(isFleetEmpty({ units: [{ type: 'fighter', count: 3 }] })).toBe(false);
+});
+```
+
+Temporarily changing `=== 0` to `<= 0` does not change behaviour here — a better mutation is changing it to `> 0`, which would flip the result. If the test doesn't catch that flip, the test is not strong enough.
+
+### Example (Rust)
+
+```rust
+// Implementation
+fn is_system_unclaimed(system: &StarSystem) -> bool {
+    system.owner.is_none() // original
+    // !system.owner.is_none() // ← mutant: flip the condition
+}
+```
+
+If you add a boundary check like `hp > 0`, try changing it to `hp >= 0` and confirm your test catches the difference.
+
+> A test that only passes against correct code is not a safety net — it is a false sense of security.
+
 ## GitHub labels
 
 Issues use a small, consistent label vocabulary. Apply one area label and,
