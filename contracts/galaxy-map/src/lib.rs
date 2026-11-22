@@ -80,6 +80,12 @@ pub struct Alliance {
 /// are likely to exceed those limits, producing a confusing deployment failure.
 pub const MAX_GRID_SIZE: u32 = 16;
 
+/// Maximum number of members allowed in a single alliance.
+///
+/// Enforced in [`join_alliance`] — once an alliance reaches this size,
+/// further join attempts panic with a clear message.
+pub const MAX_ALLIANCE_MEMBERS: u32 = 20;
+
 // ── Contract ──────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -502,6 +508,8 @@ impl GalaxyMapContract {
             .persistent()
             .get(&DataKey::Alliance(alliance_id))
             .expect("alliance not found");
+
+        require!(alliance.members.len() < MAX_ALLIANCE_MEMBERS as usize, "alliance is full");
 
         if alliance.members.iter().any(|member| member == player) {
             return;
