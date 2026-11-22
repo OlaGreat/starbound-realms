@@ -5,6 +5,7 @@ import { useLeaderboard } from './hooks/useLeaderboard';
 import { useRecentlyActivePlayers } from './hooks/useRecentlyActivePlayers';
 import { SettingsPanel } from './components/SettingsPanel';
 import { GameView } from './components/GameView';
+import { BattleShareView, readSharedBattleId } from './components/BattleShareView';
 import { Leaderboard } from './components/Leaderboard';
 import { RecentlyActivePlayers } from './components/RecentlyActivePlayers';
 import { NotificationProvider, useNotification } from './components/Notifications';
@@ -250,6 +251,12 @@ const styles: Record<string, React.CSSProperties> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // A shared battle link opens that battle on its own page, with no wallet.
+  const sharedBattleId = readSharedBattleId(window.location.search);
+  if (sharedBattleId !== null) {
+    return <BattleShareView backendUrl={BACKEND_URL} battleId={sharedBattleId} />;
+  }
+
   return (
     <NotificationProvider>
       <AppContent />

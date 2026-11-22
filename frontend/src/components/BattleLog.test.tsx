@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { BattleLog } from './BattleLog';
+import { BattleLog, buildBattleShareUrl } from './BattleLog';
 import { PlayerBattle } from '../hooks/useBattleHistory';
 
 const mockLocalStorage = (() => {
@@ -21,6 +21,12 @@ const mockLocalStorage = (() => {
 
 Object.defineProperty(global, 'localStorage', {
   value: mockLocalStorage,
+});
+
+const writeText = vi.fn().mockResolvedValue(undefined);
+Object.defineProperty(navigator, 'clipboard', {
+  configurable: true,
+  value: { writeText },
 });
 
 const MY_ADDRESS = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwx';
@@ -157,6 +163,29 @@ describe('BattleLog', () => {
     fireEvent.click(screen.getByRole('button', { name: /replay battle 42/i }));
 
     expect(onReplay).toHaveBeenCalledWith(42);
+  });
+
+  it('builds a share URL that points at the battle query param', () => {
+    expect(buildBattleShareUrl(42, { origin: 'https://game.example', pathname: '/' })).toBe(
+      'https://game.example/?battle=42'
+    );
+  });
+
+  it('copies a share link for each battle', async () => {
+    writeText.mockClear();
+    render(
+      <BattleLog
+        battles={[battle({ battleId: 42 })]}
+        isLoading={false}
+        error={null}
+        playerAddress={MY_ADDRESS}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /copy link to battle 42/i }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('battle=42')));
+    expect(await screen.findByText(/copied!/i)).toBeInTheDocument();
   });
 
   it('plays victory sound when player wins a battle', async () => {
