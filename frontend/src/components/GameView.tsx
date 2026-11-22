@@ -7,6 +7,8 @@ import { useRecentBattles } from '../hooks/useRecentBattles';
 import { useTrustlines } from '../hooks/useTrustlines';
 import { usePlayerProfile } from '../hooks/usePlayerProfile';
 import { useBattleHistory } from '../hooks/useBattleHistory';
+import { usePreferences } from '../hooks/usePreferences';
+import { playVictorySound, playDefeatSound } from '../lib/audioEffects';
 import { GalaxyMap } from './GalaxyMap';
 import { StarSystem } from './StarSystem';
 import { Fleet } from './Fleet';
@@ -63,6 +65,7 @@ export interface GameViewProps {
  * it can be tested in isolation without a real Freighter or Soroban node.
  */
 export function GameView({ walletAddress, signTransaction, backendUrl }: GameViewProps) {
+  const { preferences } = usePreferences();
   const { systems, isLoading: galaxyLoading, error: galaxyError, refetch: refetchGalaxy } =
     useGalaxyData(backendUrl);
 
@@ -203,18 +206,24 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
           signTransaction(xdr, client.networkPassphrase)
         );
         const battle = await battleClient.getBattle(battleId);
+        const isVictory = battle.winner === walletAddress;
         setBattleResult(
-          battle.winner === walletAddress
+          isVictory
             ? `Victory! You took system ${systemId} in ${battle.rounds} round(s).`
             : `Defeat. Your fleet was repelled from system ${systemId} after ${battle.rounds} round(s).`
         );
+        if (isVictory) {
+          playVictorySound(preferences.soundEnabled);
+        } else {
+          playDefeatSound(preferences.soundEnabled);
+        }
         await Promise.all([refetchFleet(), refetchGalaxy()]);
         clearSelection();
       } catch (err) {
         setAttackError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, systems, signTransaction, refetchFleet, refetchGalaxy, clearSelection]
+    [walletAddress, systems, signTransaction, refetchFleet, refetchGalaxy, clearSelection, preferences.soundEnabled]
   );
 
   useNotification(trustlineError);

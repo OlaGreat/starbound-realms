@@ -17,6 +17,7 @@ Each star system has:
 | `resource_type` | One of: Iron, Energy, Plasma |
 | `resource_yield` | Amount of resources produced per mining cycle (10–50 units) |
 | `defense_rating` | Base defense value (5–20), adds to defender fleet stats in battle |
+| `upgrade_level` | Defensive upgrade level (0+), each level adds 5 to system defense in battle |
 | `last_claimed` | Ledger timestamp of the last mining action |
 
 ---
@@ -103,7 +104,7 @@ a fleet; it never calls into the battle contract.)
 1. Load attacker's total attack power (sum of all unit attack values). Each unit type counters one other type
    (Scout → Dreadnought → Cruiser → Fighter → Scout): a unit's attack is boosted 50% while the defender fleet
    contains its counter type. This matchup rule is proposed, see [seasonal-reset-design.md](seasonal-reset-design.md)
-2. Load defender's total defense power (sum of unit defense values + system `defense_rating`)
+2. Load defender's total defense power (sum of unit defense values + system `defense_rating` + system `upgrade_level` × 5)
 3. Run combat rounds using Soroban `Prng` (seeded per ledger — verifiable, not manipulable):
    - Each round both sides roll
    - Losing side of the round loses units proportional to damage dealt
@@ -114,6 +115,24 @@ a fleet; it never calls into the battle contract.)
 6. Battle record is written to contract storage and emitted as a `battle_resolved` event
 
 **Why on-chain randomness?** Soroban's `Prng` is seeded by the ledger sequence + contract address. Outcomes are deterministic given the same inputs and independently verifiable. Players cannot game the randomness by timing their transactions.
+
+---
+
+## System Upgrades
+
+System owners can spend Plasma resources to increase a system's defensive capability. Each upgrade level raises the system's defense value by 5 points, stacking additively with the system's base `defense_rating`.
+
+**How to upgrade:**
+- Call `galaxy-map.upgrade_system(system_id)` with Plasma in your wallet
+- Cost increases per level: `100 × (current_level + 1)` Plasma
+- For example: level 0→1 costs 100 Plasma, level 1→2 costs 200 Plasma, etc.
+
+**Effect on combat:**
+- Each upgrade adds 5 defense points to the system
+- Defenders attacking a system with upgrade_level 3 gain +15 defense in battle (3 × 5)
+- Higher-level systems are significantly harder to conquer, creating strategic value in defending and upgrading
+
+**On-chain events:** When a system is upgraded, a `upgraded` event is emitted with `(system_id, new_upgrade_level, cost_paid)`.
 
 ---
 
@@ -130,7 +149,7 @@ There is no hard win condition — the galaxy is persistent. Players compete for
 ## Future Mechanics (open for contributors)
 
 - **Alliance system** — players form alliances, share system defense
-- **System upgrades** — spend Plasma to increase a system's defense or yield (proposal: [system-upgrade-design.md](system-upgrade-design.md))
+- **Resource yield upgrades** — spend Plasma to increase a system's resource production rate
 - **Fleet specializations** — unit type bonuses against specific enemies
 - **Seasonal resets** — optional governance-triggered galaxy resets (proposal: [seasonal-reset-design.md](seasonal-reset-design.md))
 

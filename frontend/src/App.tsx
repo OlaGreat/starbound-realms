@@ -5,6 +5,7 @@ import { useLeaderboard } from './hooks/useLeaderboard';
 import { useRecentlyActivePlayers } from './hooks/useRecentlyActivePlayers';
 import { NetworkBadge } from './components/NetworkBadge';
 import { ThemeToggle } from './components/ThemeToggle';
+import { SettingsPanel } from './components/SettingsPanel';
 import { GameView } from './components/GameView';
 import { Leaderboard } from './components/Leaderboard';
 import { RecentlyActivePlayers } from './components/RecentlyActivePlayers';
@@ -264,6 +265,7 @@ function AppContent() {
     useStellar();
   useNotification(walletError);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
 
   return (
@@ -277,7 +279,15 @@ function AppContent() {
         <ul style={styles.navLinks}>
           <li>
             <NetworkBadge network={NETWORK_LABEL} />
-            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              style={styles.navLink}
+              title="Settings"
+              aria-label="Open settings"
+            >
+              ⚙️
+            </button>
           </li>
           <li>
             <button
@@ -311,6 +321,14 @@ function AppContent() {
           </li>
         </ul>
       </nav>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          networkLabel={NETWORK_LABEL}
+        />
+      )}
 
       {/* Hero */}
       <section style={styles.hero}>
