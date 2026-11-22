@@ -99,4 +99,24 @@ body {
     animation: none;
     border-color: var(--accent);
   }
+
+  .galaxy-skeleton-cell {
+    animation: none;
+  }
+}
+
+/* #263: grid-shaped placeholder while the galaxy map loads */
+.galaxy-skeleton-cell {
+  animation: galaxy-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes galaxy-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
 }

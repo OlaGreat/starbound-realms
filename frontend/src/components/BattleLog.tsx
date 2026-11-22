@@ -52,6 +52,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
+/**
+ * Builds the shareable URL for a battle result. `BattleShareView` reads the
+ * `battle` query param and renders that battle on its own page.
+ */
+export function buildBattleShareUrl(
+  battleId: number,
+  location: Pick<Location, 'origin' | 'pathname'> = window.location
+): string {
+  return `${location.origin}${location.pathname}?battle=${battleId}`;
+}
+
 export interface BattleLogProps {
   battles: PlayerBattle[];
   isLoading: boolean;
@@ -70,6 +81,16 @@ export interface BattleLogProps {
 export function BattleLog({ battles, isLoading, error, playerAddress, onReplay }: BattleLogProps) {
   const { playSoundEffect } = useAudio();
   const prevBattleCountRef = React.useRef(battles.length);
+  const [copiedBattleId, setCopiedBattleId] = React.useState<number | null>(null);
+
+  const copyShareLink = async (battleId: number) => {
+    try {
+      await navigator.clipboard.writeText(buildBattleShareUrl(battleId));
+      setCopiedBattleId(battleId);
+    } catch {
+      setCopiedBattleId(null);
+    }
+  };
 
   useEffect(() => {
     if (battles.length > prevBattleCountRef.current) {
@@ -113,6 +134,13 @@ export function BattleLog({ battles, isLoading, error, playerAddress, onReplay }
                   Replay
                 </button>
               )}
+              <button
+                style={styles.replayBtn}
+                onClick={() => copyShareLink(battle.battleId)}
+                aria-label={`Copy link to battle ${battle.battleId}`}
+              >
+                {copiedBattleId === battle.battleId ? 'Copied!' : 'Copy link'}
+              </button>
             </div>
           </li>
         );

@@ -20,7 +20,10 @@ import { ResourceSetupBanner } from './ResourceSetupBanner';
 import { GalaxyEmptyState } from './GalaxyEmptyState';
 import { LoadingIndicator } from './LoadingIndicator';
 import { MainnetConfirmationDialog } from './MainnetConfirmationDialog';
-import { useNotification } from './Notifications';
+import { useNotification, useNotifications } from './Notifications';
+import { MobileBottomNav, GameTab } from './MobileBottomNav';
+import { GalaxyMapSkeleton } from './GalaxyMapSkeleton';
+import { useIsMobileViewport } from '../hooks/useIsMobileViewport';
 import { getStarboundClient } from '../lib/starboundClient';
 import { readStoredSystemId, storeSystemId, clearStoredSystemId } from '../lib/selectedSystemStorage';
 
@@ -67,6 +70,18 @@ export interface GameViewProps {
 export function GameView({ walletAddress, signTransaction, backendUrl }: GameViewProps) {
   const { signTransactionWithConfirmation, pendingConfirmation, confirmTransaction, cancelTransaction } =
     useMainnetConfirmation(signTransaction);
+
+  const { notify } = useNotifications();
+  const isMobileViewport = useIsMobileViewport();
+  const [activeTab, setActiveTab] = useState<GameTab>('galaxy');
+
+  /** On desktop every section renders; on mobile only the selected tab does. */
+  const isTabVisible = (tab: GameTab) => !isMobileViewport || activeTab === tab;
+
+  // Leave room for the fixed bottom nav so it never covers the last section.
+  const sectionStyle = isMobileViewport
+    ? { ...styles.galaxySection, paddingBottom: '5.5rem' }
+    : styles.galaxySection;
 
   const { systems, isLoading: galaxyLoading, error: galaxyError, refetch: refetchGalaxy } =
     useGalaxyData(backendUrl);
@@ -123,16 +138,18 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
       try {
         const client = getStarboundClient();
         const galaxy = new GalaxyClient(client);
+        notify(`Claim transaction submitted for system ${systemId}…`);
         await galaxy.claimSystem(walletAddress, systemId, (xdr) => 
           signTransactionWithConfirmation(xdr, client.networkPassphrase, 'Claim System')
         );
+        notify(`System ${systemId} claimed`);
         await refetchGalaxy();
         clearSelection();
       } catch (err) {
         setClaimError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, signTransactionWithConfirmation, refetchGalaxy, clearSelection]
+    [walletAddress, signTransactionWithConfirmation, refetchGalaxy, clearSelection, notify]
   );
 
   const { fleet, isLoading: fleetLoading, error: fleetError, refetch: refetchFleet } =
@@ -180,16 +197,18 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
       try {
         const client = getStarboundClient();
         const fleetClient = new FleetClient(client);
+        notify(`Fleet movement to system ${targetSystemId} submitted…`);
         await fleetClient.moveFleet(walletAddress, targetSystemId, (xdr) =>
           signTransactionWithConfirmation(xdr, client.networkPassphrase, `Move Fleet to System ${targetSystemId}`)
         );
+        notify(`Fleet moved to system ${targetSystemId}`);
         await refetchFleet();
         clearSelection();
       } catch (err) {
         setMoveError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, signTransactionWithConfirmation, refetchFleet, clearSelection]
+    [walletAddress, signTransactionWithConfirmation, refetchFleet, clearSelection, notify]
   );
 
   const [attackError, setAttackError] = useState<string | null>(null);
@@ -206,22 +225,24 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
       try {
         const client = getStarboundClient();
         const battleClient = new BattleClient(client);
+        notify(`Attack on system ${systemId} submitted…`);
         const battleId = await battleClient.resolveBattle(walletAddress, defender, systemId, (xdr) =>
           signTransactionWithConfirmation(xdr, client.networkPassphrase, `Attack System ${systemId}`)
         );
         const battle = await battleClient.getBattle(battleId);
-        setBattleResult(
+        const outcome =
           battle.winner === walletAddress
             ? `Victory! You took system ${systemId} in ${battle.rounds} round(s).`
-            : `Defeat. Your fleet was repelled from system ${systemId} after ${battle.rounds} round(s).`
-        );
+            : `Defeat. Your fleet was repelled from system ${systemId} after ${battle.rounds} round(s).`;
+        setBattleResult(outcome);
+        notify(outcome);
         await Promise.all([refetchFleet(), refetchGalaxy()]);
         clearSelection();
       } catch (err) {
         setAttackError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, systems, signTransactionWithConfirmation, refetchFleet, refetchGalaxy, clearSelection]
+    [walletAddress, systems, signTransactionWithConfirmation, refetchFleet, refetchGalaxy, clearSelection, notify]
   );
 
   useNotification(trustlineError);
@@ -245,7 +266,7 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
       )}
 
       {/* Galaxy map section */}
-      <section style={styles.galaxySection}>
+      <section style={sectionStyle}>
         {trustlinesLoading ? (
           <LoadingIndicator label="Checking resource setup…" />
         ) : (
@@ -255,77 +276,97 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
             onSetUp={setUpTrustlines}
           />
         )}
-        <h2 style={styles.galaxyTitle}>The Galaxy</h2>
-        {galaxyLoading && <LoadingIndicator label="Loading galaxy…" />}
+        {isTabVisible('galaxy') && <h2 style={styles.galaxyTitle}>The Galaxy</h2>}
+        {galaxyLoading && isTabVisible('galaxy') && <GalaxyMapSkeleton />}
         {!galaxyLoading && !galaxyError && (
           <>
-            <GalaxyEmptyState
-              ownedCount={systems.filter((s) => s.owner === walletAddress).length}
-              claimedCount={systems.filter((s) => s.owner).length}
-            />
-            <GalaxyMap
-              systems={systems}
-              walletAddress={walletAddress}
-              onSelectSystem={selectSystem}
-              selectedSystemId={selectedSystemId}
-            />
-            <StarSystem
-              system={selectedSystem}
-              walletAddress={walletAddress}
-              fleet={fleet}
-              onClose={clearSelection}
-              onClaim={claimSystem}
-              onMoveFleet={moveFleet}
-              onAttack={attackSystem}
-            />
-            {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
+            {isTabVisible('galaxy') && (
+              <>
+                <GalaxyEmptyState
+                  ownedCount={systems.filter((s) => s.owner === walletAddress).length}
+                  claimedCount={systems.filter((s) => s.owner).length}
+                />
+                <GalaxyMap
+                  systems={systems}
+                  walletAddress={walletAddress}
+                  onSelectSystem={selectSystem}
+                  selectedSystemId={selectedSystemId}
+                />
+                <StarSystem
+                  system={selectedSystem}
+                  walletAddress={walletAddress}
+                  fleet={fleet}
+                  onClose={clearSelection}
+                  onClaim={claimSystem}
+                  onMoveFleet={moveFleet}
+                  onAttack={attackSystem}
+                />
+                {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
+              </>
+            )}
 
-            <div ref={playerSectionRef}>
-              <h2 style={styles.galaxyTitle}>Your Profile</h2>
-              <PlayerProfile profile={profile} isLoading={profileLoading} error={profileError} />
-              {balancesLoading ? (
-                <LoadingIndicator label="Loading resource balances…" />
-              ) : (
-                <ResourceBalances balances={balances} />
-              )}
-              {fleetLoading ? (
-                <LoadingIndicator label="Loading fleet…" />
-              ) : (
-                <Fleet fleet={fleet} onBuildUnit={buildUnit} />
-              )}
-            </div>
+            {isTabVisible('fleet') && (
+              <div>
+                <h2 style={styles.galaxyTitle}>Your Fleet</h2>
+                {fleetLoading ? (
+                  <LoadingIndicator label="Loading fleet…" />
+                ) : (
+                  <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+                )}
+              </div>
+            )}
 
-            <div>
-              <h2 style={styles.galaxyTitle}>Trade</h2>
-              <TradeView walletAddress={walletAddress} backendUrl={backendUrl} />
-            </div>
+            {isTabVisible('profile') && (
+              <div ref={playerSectionRef}>
+                <h2 style={styles.galaxyTitle}>Your Profile</h2>
+                <PlayerProfile profile={profile} isLoading={profileLoading} error={profileError} />
+                {balancesLoading ? (
+                  <LoadingIndicator label="Loading resource balances…" />
+                ) : (
+                  <ResourceBalances balances={balances} />
+                )}
+              </div>
+            )}
 
-            <div>
-              <h2 style={styles.galaxyTitle}>Battle History</h2>
-              <BattleLog
-                battles={playerBattles}
-                isLoading={historyLoading}
-                error={historyError}
-                playerAddress={walletAddress}
-              />
-            </div>
+            {isTabVisible('profile') && (
+              <div>
+                <h2 style={styles.galaxyTitle}>Trade</h2>
+                <TradeView walletAddress={walletAddress} backendUrl={backendUrl} />
+              </div>
+            )}
+
+            {isTabVisible('battles') && (
+              <div>
+                <h2 style={styles.galaxyTitle}>Battle History</h2>
+                <BattleLog
+                  battles={playerBattles}
+                  isLoading={historyLoading}
+                  error={historyError}
+                  playerAddress={walletAddress}
+                />
+              </div>
+            )}
           </>
         )}
       </section>
 
       {/* Galaxy-wide battle feed */}
-      <section style={styles.galaxySection}>
-        <h2 style={styles.galaxyTitle}>Recent Battles</h2>
-        <BattleFeed
-          battles={recentBattles.battles}
-          isLoading={recentBattles.isLoading}
-          error={recentBattles.error}
-          hasPreviousPage={recentBattles.hasPreviousPage}
-          hasNextPage={recentBattles.hasNextPage}
-          onPreviousPage={recentBattles.goToPreviousPage}
-          onNextPage={recentBattles.goToNextPage}
-        />
-      </section>
+      {isTabVisible('battles') && (
+        <section style={sectionStyle}>
+          <h2 style={styles.galaxyTitle}>Recent Battles</h2>
+          <BattleFeed
+            battles={recentBattles.battles}
+            isLoading={recentBattles.isLoading}
+            error={recentBattles.error}
+            hasPreviousPage={recentBattles.hasPreviousPage}
+            hasNextPage={recentBattles.hasNextPage}
+            onPreviousPage={recentBattles.goToPreviousPage}
+            onNextPage={recentBattles.goToNextPage}
+          />
+        </section>
+      )}
+
+      <MobileBottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </>
   );
 }

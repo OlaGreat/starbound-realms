@@ -93,9 +93,14 @@ vi.mock('../hooks/useTrustlines', () => ({ useTrustlines: vi.fn(() => trustlines
 vi.mock('../hooks/usePlayerProfile', () => ({ usePlayerProfile: vi.fn(() => profileState) }));
 vi.mock('../hooks/useBattleHistory', () => ({ useBattleHistory: vi.fn(() => historyState) }));
 
+const viewportState = { isMobile: false };
+vi.mock('../hooks/useIsMobileViewport', () => ({ useIsMobileViewport: vi.fn(() => viewportState.isMobile) }));
+
 // ── Child component mocks ─────────────────────────────────────────────────────
 
 vi.mock('./GalaxyMap', () => ({
+  CELL_SIZE: 32,
+  CELL_GAP: 2,
   GalaxyMap: ({ onSelectSystem }: { onSelectSystem: (id: number, trigger: SVGRectElement) => void }) => (
     <div data-testid="galaxy-map">
       <button onClick={(event) => onSelectSystem(42, event.currentTarget as unknown as SVGRectElement)}>
@@ -227,6 +232,7 @@ beforeEach(() => {
   historyState.battles = [];
   historyState.isLoading = false;
   historyState.error = null;
+  viewportState.isMobile = false;
   mockRefetchGalaxy.mockResolvedValue(undefined);
   mockRefetchFleet.mockResolvedValue(undefined);
   mockRefetchBalances.mockResolvedValue(undefined);
@@ -454,6 +460,55 @@ describe('GameView', () => {
     await waitFor(() =>
       expect(screen.getByText(/claim rejected/i)).toBeInTheDocument()
     );
+  });
+
+  it('shows a submission toast and a confirmation toast for a claim', async () => {
+    galaxyState.systems = [makeSystem({ systemId: 42 })];
+    claimSystem.mockResolvedValue(undefined);
+
+    renderGameView();
+    fireEvent.click(screen.getByText('Select System 42'));
+    fireEvent.click(screen.getByText('Claim'));
+
+    expect(
+      await screen.findByText(/claim transaction submitted for system 42/i)
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/system 42 claimed/i)).toBeInTheDocument();
+  });
+
+  // ── Mobile navigation (#262) ────────────────────────────────────────────────
+
+  it('switches between views on a mobile viewport', () => {
+    viewportState.isMobile = true;
+    galaxyState.systems = [makeSystem({ systemId: 42 })];
+    profileState.profile = { address: 'GPLAYER', systemsOwned: 0, battlesWon: 0, battlesLost: 0 };
+
+    renderGameView();
+
+    expect(screen.getByTestId('mobile-bottom-nav')).toBeInTheDocument();
+    expect(screen.getByTestId('galaxy-map')).toBeInTheDocument();
+    expect(screen.queryByTestId('fleet')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('player-profile')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('mobile-nav-fleet'));
+    expect(screen.getByTestId('fleet')).toBeInTheDocument();
+    expect(screen.queryByTestId('galaxy-map')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('mobile-nav-battles'));
+    expect(screen.getByTestId('battle-log')).toBeInTheDocument();
+    expect(screen.getByTestId('battle-feed')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('mobile-nav-profile'));
+    expect(screen.getByTestId('player-profile')).toBeInTheDocument();
+    expect(screen.queryByTestId('battle-log')).not.toBeInTheDocument();
+  });
+
+  it('does not render the mobile navigation on a desktop viewport', () => {
+    renderGameView();
+
+    expect(screen.queryByTestId('mobile-bottom-nav')).not.toBeInTheDocument();
+    expect(screen.getByTestId('galaxy-map')).toBeInTheDocument();
+    expect(screen.getByTestId('battle-log')).toBeInTheDocument();
   });
 
   // ── buildUnit ──────────────────────────────────────────────────────────────
