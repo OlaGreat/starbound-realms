@@ -518,3 +518,24 @@ export async function fetchNotificationsByPlayer(db: Pool, address: string, limi
   );
   return result.rows;
 }
+
+// ── Alliance Leaderboard ──────────────────────────────────────────────────────
+
+export async function fetchAllianceLeaderboard(db: Pool, limit = 20) {
+  const result = await db.query(
+    `SELECT
+       a.alliance_id,
+       a.name,
+       a.leader,
+       COALESCE(SUM(p.systems_owned), 0) AS total_systems_owned,
+       COUNT(DISTINCT am.player) AS member_count
+     FROM alliances a
+     JOIN alliance_members am ON a.alliance_id = am.alliance_id
+     LEFT JOIN players p ON am.player = p.address
+     GROUP BY a.alliance_id, a.name, a.leader
+     ORDER BY total_systems_owned DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}

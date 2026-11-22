@@ -1,5 +1,5 @@
 import { Fleet, isFleetEmpty } from '@starbound-realms/sdk';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 import { truncateAddress } from '../lib/format';
 
@@ -69,6 +69,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  abandonButton: {
+    marginTop: '0.6rem',
+    width: '100%',
+    background: 'transparent',
+    color: 'var(--orange)',
+    border: '1px solid var(--orange)',
+    borderRadius: '8px',
+    padding: '0.7rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
 };
 
 /** Returns how a system's ownership should read relative to the connected wallet. */
@@ -90,11 +101,13 @@ export interface StarSystemProps {
   onClaim?: (systemId: number) => void;
   onMoveFleet?: (systemId: number) => void;
   onAttack?: (systemId: number) => void;
+  onAbandon?: (systemId: number) => void;
 }
 
 /** Detail drawer for a single star system, opened from GalaxyMap. */
-export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet, onAttack }: StarSystemProps) {
+export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet, onAttack, onAbandon }: StarSystemProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [showAbandonConfirmation, setShowAbandonConfirmation] = useState(false);
 
   useEffect(() => {
     if (system) {
@@ -113,6 +126,20 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
   // attack any system owned by someone else, regardless of where it is.
   const canAttack =
     Boolean(onAttack) && Boolean(fleet) && !isFleetEmpty(fleet!) && Boolean(system.owner) && system.owner !== walletAddress;
+  const canAbandon = Boolean(onAbandon) && system.owner === walletAddress;
+
+  const handleAbandon = (systemId: number) => {
+    setShowAbandonConfirmation(true);
+  };
+
+  const confirmAbandon = () => {
+    setShowAbandonConfirmation(false);
+    onAbandon?.(system.systemId);
+  };
+
+  const cancelAbandon = () => {
+    setShowAbandonConfirmation(false);
+  };
 
   return (
     <div style={styles.drawer} role="dialog" aria-labelledby={`star-system-title-${system.systemId}`}>
@@ -152,6 +179,7 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
         <span>Owner</span>
         <span>{getOwnershipLabel(system, walletAddress)}</span>
       </div>
+
       {system.activeEvent && (
         <div style={styles.row} aria-label="Active event">
           <span>Active event</span>
@@ -178,6 +206,52 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
         <button style={styles.attackButton} onClick={() => onAttack!(system.systemId)}>
           Attack
         </button>
+      )}
+
+      {canAbandon && (
+        <div>
+          {showAbandonConfirmation ? (
+            <div style={{ marginTop: '1rem', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1rem' }}>
+              <p style={{ margin: '0 0 1rem 0', color: 'var(--error)' }}>
+                Are you sure you want to abandon this system? This action is irreversible.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={cancelAbandon}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem 1rem',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAbandon}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem 1rem',
+                    border: 'none',
+                    background: 'var(--error)',
+                    color: '#fff',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Abandon
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button style={styles.abandonButton} onClick={handleAbandon}>
+              Abandon System
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

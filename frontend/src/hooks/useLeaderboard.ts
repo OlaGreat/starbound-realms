@@ -7,11 +7,14 @@ export interface LeaderboardEntry {
   battlesLost: number;
 }
 
-/**
- * The raw shape the backend's `GET /leaderboard` actually returns: a Postgres
- * `players` row as-is (snake_case columns), with TIMESTAMP columns serialized
- * as ISO strings, per node-postgres's default type parsing.
- */
+export interface AllianceLeaderboardEntry {
+  allianceId: number;
+  name: string;
+  leader: string;
+  totalSystemsOwned: number;
+  memberCount: number;
+}
+
 interface RawPlayer {
   address: string;
   systems_owned: number;
@@ -19,6 +22,14 @@ interface RawPlayer {
   battles_lost: number;
   first_seen: string;
   last_active: string;
+}
+
+interface RawAllianceLeaderboard {
+  alliance_id: number;
+  name: string;
+  leader: string;
+  total_systems_owned: number;
+  member_count: number;
 }
 
 /** Maps the backend's snake_case row to the frontend's camelCase shape. */
@@ -31,6 +42,18 @@ function toLeaderboardEntry(raw: RawPlayer): LeaderboardEntry {
   };
 }
 
+/** Maps the backend's alliance leaderboard row to the frontend shape. */
+function toAllianceLeaderboardEntry(raw: RawAllianceLeaderboard): AllianceLeaderboardEntry {
+  return {
+    allianceId: raw.alliance_id,
+    name: raw.name,
+    leader: raw.leader,
+    totalSystemsOwned: raw.total_systems_owned,
+    memberCount: raw.member_count,
+  };
+}
+
+/** The shape returned by the hook. */
 export interface UseLeaderboardResult {
   players: LeaderboardEntry[];
   isLoading: boolean;
