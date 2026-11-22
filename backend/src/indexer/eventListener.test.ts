@@ -13,7 +13,7 @@ vi.mock('./processor', () => ({
 
 import { processEvent } from './processor';
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
+// ── Fixtures ───────────────────────────────────────────────────────────
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 1));
 const PLAYER = Keypair.random().publicKey();
@@ -70,14 +70,12 @@ describe('decodeContractEvents', () => {
   });
 
   it('handles events with malformed topic values', () => {
-    // Test with empty topic array
     const emptyTopicEvent = makeRawEvent({ topic: [] });
     const [decoded] = decodeContractEvents([emptyTopicEvent]);
     expect(decoded.topic).toEqual([]);
   });
 
   it('decodes events with unexpected value types without throwing', () => {
-    // Event with a complex nested structure as value
     const complexValueEvent = makeRawEvent({
       value: nativeToScVal({ nested: { field: 'value' } }, { type: 'map' }),
     });
@@ -98,7 +96,37 @@ describe('fetchContractEvents', () => {
     expect(getEvents).toHaveBeenCalledWith({
       startLedger: 50,
       filters: [{ type: 'contract', contractIds: [CONTRACT_ID] }],
+      limit: 100,
     });
+  });
+
+  it('paginates through a large ledger gap using response cursors', async () => {
+    const getEvents = vi.fn()
+      .mockResolvedValueOnce({ events: [makeRawEvent({ ledger: 51 })], latestLedger: 100, cursor: 'page-2' })
+      .mockResolvedValueOnce({ events: [makeRawEvent({ ledger: 52 })], latestLedger: 100, cursor: 'page-3' })
+      .mockResolvedValueOnce({ events: [makeRawEvent({ ledger: 53 })], latestLedger: 100 });
+    const server = { getEvents } as unknown as rpc.Server;
+
+    const response = await fetchContractEvents(server, [CONTRACT_ID], 50);
+
+    expect(getEvents).toHaveBeenCalledTimes(3);
+    expect(getEvents).toHaveBeenNthCalledWith(1, {
+      startLedger: 50,
+      filters: [{ type: 'contract', contractIds: [CONTRACT_ID] }],
+      limit: 100,
+    });
+    expect(getEvents).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: 'page-2', limit: 100 }));
+    expect(getEvents).toHaveBeenNthCalledWith(3, expect.objectContaining({ cursor: 'page-3', limit: 100 }));
+    expect(response.events).toHaveLength(3);
+  });
+
+  it('stops before RPC cursor pagination can loop indefinitely', async () => {
+    const getEvents = vi.fn().mockResolvedValue({
+      events: [], latestLedger: 100, cursor: 'same-cursor',
+    });
+    const server = { getEvents } as unknown as rpc.Server;
+
+    await expect(fetchContractEvents(server, [CONTRACT_ID], 50)).rejects.toThrow(/pagination/i);
   });
 });
 
@@ -120,6 +148,18 @@ describe('runIndexerPollCycle', () => {
 
     expect(processEvent).toHaveBeenCalledTimes(1);
     expect(processEvent).toHaveBeenCalledWith(db, expect.objectContaining({ contractId: CONTRACT_ID }));
+  });
+
+  it('persists large catches in bounded pages', async () => {
+    const getEvents = vi.fn()
+      .mockResolvedValueOnce({ events: [makeRawEvent({ ledger: 51 })], latestLedger: 100, cursor: 'next' })
+      .mockResolvedValueOnce({ events: [makeRawEvent({ ledger: 52 })], latestLedger: 100 });
+    const server = { getEvents } as unknown as rpc.Server;
+
+    await runIndexerPollCycle(server, {} as any, [CONTRACT_ID], 50);
+
+    expect(getEvents).toHaveBeenCalledTimes(2);
+    expect(processEvent).toHaveBeenCalledTimes(2);
   });
 
   it('returns the ledger to resume from on the next cycle', async () => {
@@ -194,7 +234,6 @@ describe('startEventListener', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('invalid event') }));
 
-    // Loop continues after the error
     await vi.advanceTimersByTimeAsync(1000);
     expect(runPollCycle).toHaveBeenCalledTimes(2);
 
